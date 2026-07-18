@@ -1,4 +1,4 @@
-# Blueprint Library
+# Blueprint Book
 
 This is a complete rewrite of KiitikM's original Blueprint Library mod for shapez. It fixes the prior memory leaks and integrates the interface natively into the game. I built a tagging and filtering system backed by a unified state store to handle large collections of blueprint strings. The dialog wires directly into the HUDGameMenu. It correctly intercepts input bubbling during text entry, so you don't accidentally trigger background game actions while typing.
 
