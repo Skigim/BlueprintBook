@@ -32,7 +32,8 @@ class BlueprintLibraryMod extends shapez.Mod {
             id: "blueprint_book_toggle",
             keyCode: 80, // 'P'
             translation: "Open/Close Blueprint Book",
-            handler: root => {
+            handler: (root, event) => {
+                if (event && (event.ctrlKey || event.metaKey)) return;
                 const library = root.hud?.parts?.blueprintLibrary;
                 if (!library) return;
                 return library.handleToggleHotkey();

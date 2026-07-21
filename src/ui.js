@@ -7,7 +7,7 @@ const NOTIFY = (shapez && shapez.enumNotificationType) || {
     info: "info", warning: "warning", error: "error", success: "success",
 };
 
-import { MOD_CHANGELOG, RELEASE_NOTES_1_0_1 } from "./changelog.js";
+import { MOD_CHANGELOG, RELEASE_NOTES_1_0_1, getReleaseNotesForVersion } from "./changelog.js";
 
 export function registerNativeChangelogEntry() {
     if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
@@ -132,31 +132,36 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
         const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
 
-        const update = await checkForUpdates(currentVersion);
+        try {
+            const update = await checkForUpdates(currentVersion);
 
-        if (update.updateAvailable && update.latestVersion !== skippedVersion) {
-            // Scenario A: A newer version is published on GitHub / Mod.io
-            this.showUpdateDialog(update);
-            try {
-                if (typeof localStorage !== "undefined") {
-                    localStorage.setItem("bplib_last_seen_version", update.latestVersion);
-                }
-            } catch (e) {}
-        } else if (lastSeenVersion !== currentVersion) {
-            // Scenario B: First time running this installed version (e.g. v1.0.1 welcome dialog)
-            this.showWelcomeDialog(currentVersion);
-            try {
-                if (typeof localStorage !== "undefined") {
-                    localStorage.setItem("bplib_last_seen_version", currentVersion);
-                }
-            } catch (e) {}
+            if (update.updateAvailable && update.latestVersion !== skippedVersion) {
+                // Scenario A: A newer version is published on GitHub / Mod.io
+                this.showUpdateDialog(update);
+                try {
+                    if (typeof localStorage !== "undefined") {
+                        localStorage.setItem("bplib_last_seen_version", currentVersion);
+                    }
+                } catch (e) {}
+            } else if (lastSeenVersion !== currentVersion) {
+                // Scenario B: First time running this installed version (e.g. v1.0.1 welcome dialog)
+                this.showWelcomeDialog(currentVersion);
+                try {
+                    if (typeof localStorage !== "undefined") {
+                        localStorage.setItem("bplib_last_seen_version", currentVersion);
+                    }
+                } catch (e) {}
+            }
+        } catch (err) {
+            console.error("[BlueprintBook] Update check failed:", err);
         }
     }
 
     showWelcomeDialog(version) {
-        const entries = Array.isArray(RELEASE_NOTES_1_0_1)
-            ? RELEASE_NOTES_1_0_1
-            : (RELEASE_NOTES_1_0_1 || "").split("\n").map(l => l.trim()).filter(Boolean);
+        const rawNotes = getReleaseNotesForVersion(version);
+        const entries = Array.isArray(rawNotes)
+            ? rawNotes
+            : (rawNotes || "").split("\n").map(l => l.trim()).filter(Boolean);
 
         const notesHtml = entries
             .map(entry => `<div style="margin-bottom: 6px; line-height: 1.35; padding-left: 14px; position: relative;"><span style="position: absolute; left: 0; color: #4CAF50;">•</span>${entry}</div>`)
@@ -192,11 +197,17 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             shapez.T.dialogs.buttons.skipVersion = "SKIP VERSION";
         }
 
+        const escapeHtml = str => String(str || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+
         const notesHtml = (releaseNotes || "")
             .split("\n")
             .map(line => line.trim())
             .filter(line => line.length > 0)
-            .map(line => `<div style="margin-bottom: 6px; line-height: 1.3;">${line}</div>`)
+            .map(line => `<div style="margin-bottom: 6px; line-height: 1.3;">${escapeHtml(line)}</div>`)
             .join("");
 
         const dialog = new shapez.Dialog({
@@ -323,7 +334,8 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                 this.cleanupDynamicClickDetectors();
             });
         } catch (err) {
-            alert("Error in show(): " + err.message + "\n" + err.stack);
+            console.error("Error in show():", err);
+            this.notify("Error opening Blueprint Book. Check console.", NOTIFY.error);
         }
     }
 
@@ -386,7 +398,8 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
             this.renderGrid();
         } catch (err) {
-            alert("Error in render(): " + err.message + "\n" + err.stack);
+            console.error("Error in render():", err);
+            this.notify("Error rendering Blueprint Book. Check console.", NOTIFY.error);
         }
     }
 

@@ -77,12 +77,21 @@ export const BlueprintStore = {
     },
 
     update(id, updates) {
+        if (!updates || typeof updates !== "object") return false;
         const entry = this.mod.settings.blueprints.find(e => e.id === id);
         if (!entry) return false;
-        Object.assign(entry, updates);
-        if (updates.tags) {
-            this.ensureTags(updates.tags);
+
+        if (updates.name !== undefined) {
+            entry.name = typeof updates.name === "string" && updates.name.trim() ? updates.name.trim() : "Blueprint " + id;
         }
+        if (updates.value !== undefined) {
+            entry.value = String(updates.value || "").replace(/\r\n/g, "\n").trim();
+        }
+        if (updates.tags !== undefined) {
+            entry.tags = Array.isArray(updates.tags) ? updates.tags : [];
+            this.ensureTags(entry.tags);
+        }
+
         this.pruneTags();
         this.persist();
         return true;

@@ -11,4 +11,11 @@ export const MOD_CHANGELOG = [
     }
 ];
 
-export const RELEASE_NOTES_1_0_1 = MOD_CHANGELOG[0].entries;
+export function getReleaseNotesForVersion(version) {
+    const cleanVer = (version || "").toString().replace(/^v/i, "").trim();
+    const entry = MOD_CHANGELOG.find(item => item.version.replace(/^v/i, "").trim() === cleanVer);
+    return entry ? entry.entries : [];
+}
+
+export const RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
+

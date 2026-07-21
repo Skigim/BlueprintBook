@@ -273,11 +273,18 @@
       return entry;
     },
     update(id, updates) {
+      if (!updates || typeof updates !== "object") return false;
       const entry = this.mod.settings.blueprints.find((e) => e.id === id);
       if (!entry) return false;
-      Object.assign(entry, updates);
-      if (updates.tags) {
-        this.ensureTags(updates.tags);
+      if (updates.name !== void 0) {
+        entry.name = typeof updates.name === "string" && updates.name.trim() ? updates.name.trim() : "Blueprint " + id;
+      }
+      if (updates.value !== void 0) {
+        entry.value = String(updates.value || "").replace(/\r\n/g, "\n").trim();
+      }
+      if (updates.tags !== void 0) {
+        entry.tags = Array.isArray(updates.tags) ? updates.tags : [];
+        this.ensureTags(entry.tags);
       }
       this.pruneTags();
       this.persist();
@@ -460,7 +467,12 @@
       ]
     }
   ];
-  var RELEASE_NOTES_1_0_1 = MOD_CHANGELOG[0].entries;
+  function getReleaseNotesForVersion(version) {
+    const cleanVer = (version || "").toString().replace(/^v/i, "").trim();
+    const entry = MOD_CHANGELOG.find((item) => item.version.replace(/^v/i, "").trim() === cleanVer);
+    return entry ? entry.entries : [];
+  }
+  var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
   // src/ui.js
   var NOTIFY = shapez && shapez.enumNotificationType || {
@@ -573,27 +585,32 @@
       const currentVersion = METADATA.version;
       const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
       const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
-      const update = await checkForUpdates(currentVersion);
-      if (update.updateAvailable && update.latestVersion !== skippedVersion) {
-        this.showUpdateDialog(update);
-        try {
-          if (typeof localStorage !== "undefined") {
-            localStorage.setItem("bplib_last_seen_version", update.latestVersion);
+      try {
+        const update = await checkForUpdates(currentVersion);
+        if (update.updateAvailable && update.latestVersion !== skippedVersion) {
+          this.showUpdateDialog(update);
+          try {
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem("bplib_last_seen_version", currentVersion);
+            }
+          } catch (e) {
           }
-        } catch (e) {
-        }
-      } else if (lastSeenVersion !== currentVersion) {
-        this.showWelcomeDialog(currentVersion);
-        try {
-          if (typeof localStorage !== "undefined") {
-            localStorage.setItem("bplib_last_seen_version", currentVersion);
+        } else if (lastSeenVersion !== currentVersion) {
+          this.showWelcomeDialog(currentVersion);
+          try {
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem("bplib_last_seen_version", currentVersion);
+            }
+          } catch (e) {
           }
-        } catch (e) {
         }
+      } catch (err) {
+        console.error("[BlueprintBook] Update check failed:", err);
       }
     }
     showWelcomeDialog(version) {
-      const entries = Array.isArray(RELEASE_NOTES_1_0_1) ? RELEASE_NOTES_1_0_1 : (RELEASE_NOTES_1_0_1 || "").split("\n").map((l) => l.trim()).filter(Boolean);
+      const rawNotes = getReleaseNotesForVersion(version);
+      const entries = Array.isArray(rawNotes) ? rawNotes : (rawNotes || "").split("\n").map((l) => l.trim()).filter(Boolean);
       const notesHtml = entries.map((entry) => `<div style="margin-bottom: 6px; line-height: 1.35; padding-left: 14px; position: relative;"><span style="position: absolute; left: 0; color: #4CAF50;">\u2022</span>${entry}</div>`).join("");
       const dialog = new shapez.Dialog({
         app: this.root.app,
@@ -622,7 +639,8 @@
         shapez.T.dialogs.buttons.viewOnModIo = "VIEW ON MOD.IO";
         shapez.T.dialogs.buttons.skipVersion = "SKIP VERSION";
       }
-      const notesHtml = (releaseNotes || "").split("\n").map((line) => line.trim()).filter((line) => line.length > 0).map((line) => `<div style="margin-bottom: 6px; line-height: 1.3;">${line}</div>`).join("");
+      const escapeHtml = (str) => String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const notesHtml = (releaseNotes || "").split("\n").map((line) => line.trim()).filter((line) => line.length > 0).map((line) => `<div style="margin-bottom: 6px; line-height: 1.3;">${escapeHtml(line)}</div>`).join("");
       const dialog = new shapez.Dialog({
         app: this.root.app,
         title: "Update Available!",
@@ -725,7 +743,8 @@
           this.cleanupDynamicClickDetectors();
         });
       } catch (err) {
-        alert("Error in show(): " + err.message + "\n" + err.stack);
+        console.error("Error in show():", err);
+        this.notify("Error opening Blueprint Book. Check console.", NOTIFY.error);
       }
     }
     close() {
@@ -785,7 +804,8 @@
         }
         this.renderGrid();
       } catch (err) {
-        alert("Error in render(): " + err.message + "\n" + err.stack);
+        console.error("Error in render():", err);
+        this.notify("Error rendering Blueprint Book. Check console.", NOTIFY.error);
       }
     }
     _createBlueprintCard(bp, trackClick) {
@@ -920,7 +940,8 @@
         keyCode: 80,
         // 'P'
         translation: "Open/Close Blueprint Book",
-        handler: (root) => {
+        handler: (root, event) => {
+          if (event && (event.ctrlKey || event.metaKey)) return;
           const library = root.hud?.parts?.blueprintLibrary;
           if (!library) return;
           return library.handleToggleHotkey();
