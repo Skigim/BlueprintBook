@@ -13,6 +13,32 @@ class BlueprintLibraryMod extends shapez.Mod {
         this.modInterface.registerCss(CSS);
         this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);
 
+        // Register native keybindings
+        // MUST register the Save (Ctrl+P) hotkey BEFORE the Open/Close (P) hotkey!
+        // Otherwise, Shapez's input mapper will match 'P' first and swallow the Ctrl+P event.
+        this.modInterface.registerIngameKeybinding({
+            id: "blueprint_book_save",
+            keyCode: 80, // 'P'
+            translation: "Save Blueprint to Book",
+            modifiers: { ctrl: true },
+            handler: root => {
+                const library = root.hud?.parts?.blueprintLibrary;
+                if (!library) return;
+                return library.handleSaveHotkey();
+            }
+        });
+
+        this.modInterface.registerIngameKeybinding({
+            id: "blueprint_book_toggle",
+            keyCode: 80, // 'P'
+            translation: "Open/Close Blueprint Book",
+            handler: root => {
+                const library = root.hud?.parts?.blueprintLibrary;
+                if (!library) return;
+                return library.handleToggleHotkey();
+            }
+        });
+
         // Inject button into the game menu
         injectHUDGameMenuButton(
             this.modInterface,

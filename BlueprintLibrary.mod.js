@@ -291,13 +291,6 @@
     }
   };
 
-  // lib/dom.js
-  function preventGameInputs(element) {
-    ["keydown", "keyup", "keypress", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu", "click"].forEach((evt) => {
-      element.addEventListener(evt, (e) => e.stopPropagation(), { capture: false });
-    });
-  }
-
   // lib/ui.js
   function injectHUDGameMenuButton(modInterface, buttonClass, title, clickHandler) {
     modInterface.extendClass(shapez.HUDGameMenu, ({ $old }) => ({
@@ -336,9 +329,6 @@
       },
       bindEvents(parent) {
         this.element = parent.querySelector(`#custom-textarea-${this.id}`);
-        if (this.element) {
-          preventGameInputs(this.element);
-        }
       },
       focus() {
         if (this.element) this.element.focus();
@@ -367,45 +357,60 @@
     }
     bindEvents() {
       const searchInput = this.overlay.querySelector("#bplib-search");
-      preventGameInputs(searchInput);
       searchInput.onpointerdown = () => searchInput.focus();
       searchInput.addEventListener("input", (e) => {
         this.searchQuery = e.target.value.toLowerCase();
         this.render();
       });
       this.dialog.trackClicks(this.overlay.querySelector("#bplib-btn-import"), () => {
-        const nameInput = new shapez.FormElementInput({
-          id: "name",
-          label: "Blueprint Name",
-          placeholder: "New Blueprint",
-          defaultValue: ""
-        });
-        const tagsInput = new shapez.FormElementInput({
-          id: "tags",
-          label: "Tags (comma-separated)",
-          placeholder: "Belt, Factory",
-          defaultValue: ""
-        });
-        const stringInput = createTextAreaFormElement("import_string", "Blueprint String", "Paste string here...", "");
-        const dialog = new shapez.DialogWithForm({
-          app: this.root.app,
-          title: "Import Blueprint",
-          desc: "Paste your blueprint string below and optionally give it a name and tags.",
-          formElements: [nameInput, tagsInput, stringInput],
-          buttons: ["cancel:bad:escape", "ok:good:enter"],
-          closeButton: false
-        });
-        this.root.hud.parts.dialogs.internalShowDialog(dialog);
-        dialog.buttonSignals.ok.add(() => {
-          const name = nameInput.getValue() || "New Blueprint";
-          const str = stringInput.getValue();
-          const tagsStr = tagsInput.getValue();
-          if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
-          const newTags = tagsStr.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-          BlueprintStore.add(name, str, newTags);
+        this.openImportDialog();
+      });
+    }
+    _showBlueprintFormDialog({ title, desc, defaults = {}, textareaId = "string", onSubmit }) {
+      const nameInput = new shapez.FormElementInput({
+        id: "name",
+        label: "Blueprint Name",
+        placeholder: "New Blueprint",
+        defaultValue: defaults.name || ""
+      });
+      const tagsInput = new shapez.FormElementInput({
+        id: "tags",
+        label: "Tags (comma-separated)",
+        placeholder: "Belt, Factory",
+        defaultValue: defaults.tags || ""
+      });
+      const stringInput = createTextAreaFormElement(textareaId, "Blueprint String", "Paste string here...", defaults.value || "");
+      const dialog = new shapez.DialogWithForm({
+        app: this.root.app,
+        title,
+        desc,
+        formElements: [nameInput, tagsInput, stringInput],
+        buttons: ["cancel:bad:escape", "ok:good:enter"],
+        closeButton: false
+      });
+      this.root.hud.parts.dialogs.internalShowDialog(dialog);
+      dialog.buttonSignals.ok.add(() => {
+        const name = nameInput.getValue() || "New Blueprint";
+        const str = stringInput.getValue();
+        const tagsStr = tagsInput.getValue();
+        if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
+        const newTags = tagsStr.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+        onSubmit(name, str, newTags);
+      });
+    }
+    openImportDialog(initialString = "") {
+      this._showBlueprintFormDialog({
+        title: "Import Blueprint",
+        desc: "Paste your blueprint string below and optionally give it a name and tags.",
+        defaults: { value: initialString },
+        textareaId: "import_string",
+        onSubmit: (name, str, tags) => {
+          BlueprintStore.add(name, str, tags);
           this.notify("Blueprint imported!", NOTIFY.success);
-          this.render();
-        });
+          if (this.visible) {
+            this.render();
+          }
+        }
       });
     }
     cleanupDynamicClickDetectors() {
@@ -427,6 +432,26 @@
     }
     initialize() {
       this.visible = false;
+    }
+    handleSaveHotkey() {
+      if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
+      const selectedUids = this.root.hud.parts.massSelector.selectedUids;
+      if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
+      const bpMod = shapez.BlueprintLibraryModLoader.mods.find((m) => m.metadata.id === "bp-string");
+      if (!bpMod) return "stop_propagation";
+      const selectedEntities = Array.from(selectedUids).map((uid) => this.root.entityMgr.findByUid(uid)).filter(Boolean);
+      const blueprintString = bpMod.constructor.serialize(selectedEntities);
+      this.openImportDialog(blueprintString);
+      return "stop_propagation";
+    }
+    handleToggleHotkey() {
+      if (this.root?.app?.inputMgr?.keysDown?.has(17)) return "stop_propagation";
+      if (this.visible) {
+        if (this.dialog) this.dialog.closeRequested.dispatch();
+      } else {
+        this.show();
+      }
+      return "stop_propagation";
     }
     cleanup() {
       super.cleanup();
@@ -531,6 +556,57 @@
         alert("Error in render(): " + err.message + "\n" + err.stack);
       }
     }
+    _createBlueprintCard(bp, trackClick) {
+      const card = document.createElement("div");
+      card.className = "bplib-upgrade";
+      const titleDiv = document.createElement("div");
+      titleDiv.className = "title";
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "name";
+      nameDiv.innerText = bp.name;
+      const tierDiv = document.createElement("div");
+      tierDiv.className = "tier";
+      tierDiv.innerText = "BP";
+      titleDiv.appendChild(nameDiv);
+      titleDiv.appendChild(tierDiv);
+      const descDiv = document.createElement("div");
+      descDiv.className = "description";
+      descDiv.innerText = `Tags: ${(bp.tags || []).join(", ") || "None"}`;
+      const delBtn = document.createElement("button");
+      delBtn.className = "bplib-action-delete";
+      delBtn.title = "Delete Blueprint";
+      delBtn.innerText = "X";
+      trackClick(delBtn, () => {
+        this.deleteBlueprint(bp);
+      });
+      descDiv.appendChild(delBtn);
+      const iconDiv = document.createElement("div");
+      iconDiv.className = "icon";
+      const reqDiv = document.createElement("div");
+      reqDiv.className = "requirements";
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "bplib-upgrade-actions";
+      const equipBtn = document.createElement("button");
+      equipBtn.className = "button styledButton good bplib-btn-equip";
+      equipBtn.innerText = "EQUIP";
+      trackClick(equipBtn, () => {
+        this.equipBlueprint(bp.value);
+      });
+      const editBtn = document.createElement("button");
+      editBtn.className = "button styledButton bplib-btn-edit";
+      editBtn.innerText = "EDIT";
+      trackClick(editBtn, () => {
+        this.editBlueprint(bp);
+      });
+      actionsDiv.appendChild(equipBtn);
+      actionsDiv.appendChild(editBtn);
+      card.appendChild(titleDiv);
+      card.appendChild(descDiv);
+      card.appendChild(iconDiv);
+      card.appendChild(reqDiv);
+      card.appendChild(actionsDiv);
+      return card;
+    }
     renderGrid() {
       try {
         const grid = this.overlay.querySelector("#bplib-grid");
@@ -546,56 +622,9 @@
           grid.innerHTML = '<div style="text-align: center; color: #777; padding: 40px;">No blueprints found.</div>';
           return;
         }
+        const trackClick = this.trackDynamicClick.bind(this);
         blueprints.forEach((bp) => {
-          const card = document.createElement("div");
-          card.className = "bplib-upgrade";
-          const titleDiv = document.createElement("div");
-          titleDiv.className = "title";
-          const nameDiv = document.createElement("div");
-          nameDiv.className = "name";
-          nameDiv.innerText = bp.name;
-          const tierDiv = document.createElement("div");
-          tierDiv.className = "tier";
-          tierDiv.innerText = "BP";
-          titleDiv.appendChild(nameDiv);
-          titleDiv.appendChild(tierDiv);
-          const descDiv = document.createElement("div");
-          descDiv.className = "description";
-          descDiv.innerText = `Tags: ${(bp.tags || []).join(", ") || "None"}`;
-          const delBtn = document.createElement("button");
-          delBtn.className = "bplib-action-delete";
-          delBtn.title = "Delete Blueprint";
-          delBtn.innerText = "X";
-          this.trackDynamicClick(delBtn, () => {
-            this.deleteBlueprint(bp);
-          });
-          descDiv.appendChild(delBtn);
-          const iconDiv = document.createElement("div");
-          iconDiv.className = "icon";
-          const reqDiv = document.createElement("div");
-          reqDiv.className = "requirements";
-          const actionsDiv = document.createElement("div");
-          actionsDiv.className = "bplib-upgrade-actions";
-          const equipBtn = document.createElement("button");
-          equipBtn.className = "button styledButton good bplib-btn-equip";
-          equipBtn.innerText = "EQUIP";
-          this.trackDynamicClick(equipBtn, () => {
-            this.equipBlueprint(bp.value);
-          });
-          const editBtn = document.createElement("button");
-          editBtn.className = "button styledButton bplib-btn-edit";
-          editBtn.innerText = "EDIT";
-          this.trackDynamicClick(editBtn, () => {
-            this.editBlueprint(bp);
-          });
-          actionsDiv.appendChild(equipBtn);
-          actionsDiv.appendChild(editBtn);
-          card.appendChild(titleDiv);
-          card.appendChild(descDiv);
-          card.appendChild(iconDiv);
-          card.appendChild(reqDiv);
-          card.appendChild(actionsDiv);
-          grid.appendChild(card);
+          grid.appendChild(this._createBlueprintCard(bp, trackClick));
         });
       } catch (err) {
         console.error("Error in renderGrid():", err);
@@ -603,37 +632,22 @@
       }
     }
     editBlueprint(bp) {
-      const nameInput = new shapez.FormElementInput({
-        id: "name",
-        label: "Blueprint Name",
-        placeholder: "New Blueprint",
-        defaultValue: bp.name
-      });
-      const tagsInput = new shapez.FormElementInput({
-        id: "tags",
-        label: "Tags (comma-separated)",
-        placeholder: "Belt, Factory",
-        defaultValue: (bp.tags || []).join(", ")
-      });
-      const stringInput = createTextAreaFormElement("edit_string", "Blueprint String", "Paste string here...", bp.value);
-      const dialog = new shapez.DialogWithForm({
-        app: this.root.app,
+      this._showBlueprintFormDialog({
         title: "Edit Blueprint",
         desc: "Update your blueprint details below.",
-        formElements: [nameInput, tagsInput, stringInput],
-        buttons: ["cancel:bad:escape", "ok:good:enter"],
-        closeButton: false
-      });
-      this.root.hud.parts.dialogs.internalShowDialog(dialog);
-      dialog.buttonSignals.ok.add(() => {
-        const name = nameInput.getValue() || "New Blueprint";
-        const str = stringInput.getValue();
-        const tagsStr = tagsInput.getValue();
-        if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
-        const newTags = tagsStr.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-        BlueprintStore.update(bp.id, { name, value: str, tags: newTags });
-        this.notify("Blueprint updated!", NOTIFY.success);
-        this.render();
+        defaults: {
+          name: bp.name,
+          tags: (bp.tags || []).join(", "),
+          value: bp.value
+        },
+        textareaId: "edit_string",
+        onSubmit: (name, str, tags) => {
+          BlueprintStore.update(bp.id, { name, value: str, tags });
+          this.notify("Blueprint updated!", NOTIFY.success);
+          if (this.visible) {
+            this.render();
+          }
+        }
       });
     }
     deleteBlueprint(bp) {
@@ -657,6 +671,29 @@
       BlueprintStore.init(this);
       this.modInterface.registerCss(CSS);
       this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);
+      this.modInterface.registerIngameKeybinding({
+        id: "blueprint_book_save",
+        keyCode: 80,
+        // 'P'
+        translation: "Save Blueprint to Book",
+        modifiers: { ctrl: true },
+        handler: (root) => {
+          const library = root.hud?.parts?.blueprintLibrary;
+          if (!library) return;
+          return library.handleSaveHotkey();
+        }
+      });
+      this.modInterface.registerIngameKeybinding({
+        id: "blueprint_book_toggle",
+        keyCode: 80,
+        // 'P'
+        translation: "Open/Close Blueprint Book",
+        handler: (root) => {
+          const library = root.hud?.parts?.blueprintLibrary;
+          if (!library) return;
+          return library.handleToggleHotkey();
+        }
+      });
       injectHUDGameMenuButton(
         this.modInterface,
         "blueprintLibrary",
