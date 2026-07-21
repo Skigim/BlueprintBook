@@ -1,0 +1,21 @@
+export const MOD_CHANGELOG = [
+    {
+        version: "1.0.1",
+        date: "2026-07-21",
+        entries: [
+            "<strong>Native Hotkey Support</strong>: Full keybind integration ('P' to toggle book, 'Ctrl+P' to save blueprint) with custom keybinding overlay hints and rebinding support in settings.",
+            "<strong>Automatic Update Notifications</strong>: You will now be notified automatically when a new update is available, with a handy VIEW ON MOD.IO button to download the latest version in your browser.",
+            "<strong>Welcome Dialog</strong>: A dialog that appears when running a new version for the first time, showing what changed.",
+            "<strong>Cleaner Interface</strong>: Rebuilt the blueprint library popups and card layouts for smoother performance and smaller mod file size."
+        ]
+    }
+];
+
+export function getReleaseNotesForVersion(version) {
+    const cleanVer = (version || "").toString().replace(/^v/i, "").trim();
+    const entry = MOD_CHANGELOG.find(item => item.version.replace(/^v/i, "").trim() === cleanVer);
+    return entry ? entry.entries : [];
+}
+
+export const RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
+

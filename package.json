@@ -1,0 +1,27 @@
+{
+  "name": "blueprintbook",
+  "version": "1.0.1",
+  "description": "![Preview](preview.png)",
+  "main": "BlueprintLibrary.mod.js",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/index.js --bundle --outfile=BlueprintLibrary.mod.js --format=iife",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Skigim/BlueprintBook.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Skigim/BlueprintBook/issues"
+  },
+  "homepage": "https://github.com/Skigim/BlueprintBook#readme",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.10"
+  }
+}

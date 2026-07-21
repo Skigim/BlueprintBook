@@ -1,2 +1,6 @@
 .memory/
 .agents/
+node_modules/
+
+shapez_source/
+tree.json

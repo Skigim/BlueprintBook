@@ -1,0 +1,102 @@
+name: Publish Release to Mod.io
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modio-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-modio:
+    name: Build & Upload to Mod.io
+    if: !github.event.release.prerelease
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies & Build
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Validate Release Tag & Package Mod Archive
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+            echo "::error::Invalid release tag format: '$RELEASE_TAG'"
+            exit 1
+          fi
+          mkdir -p dist
+          zip -j "dist/BlueprintBook-${RELEASE_TAG}.zip" BlueprintLibrary.mod.js README.md preview.png
+
+      - name: Upload Modfile to Mod.io
+        env:
+          MODIO_TOKEN: ${{ secrets.MODIO_TOKEN }}
+          GAME_ID: ${{ secrets.MODIO_GAME_ID }}
+          MOD_ID: ${{ secrets.MODIO_MOD_ID }}
+          VERSION: ${{ github.event.release.tag_name }}
+          CHANGELOG: ${{ github.event.release.body }}
+        run: |
+          if [ -z "$MODIO_TOKEN" ]; then
+            echo "::error::MODIO_TOKEN secret is missing!"
+            exit 1
+          fi
+          if [[ -z "$GAME_ID" || ! "$GAME_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::GAME_ID secret/variable is missing or non-numeric!"
+            exit 1
+          fi
+          if [[ -z "$MOD_ID" || ! "$MOD_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::MOD_ID secret/variable is missing or non-numeric!"
+            exit 1
+          fi
+
+          echo "Checking if version $VERSION is already published to mod.io ($GAME_ID / $MOD_ID)..."
+          EXISTING_FILES=$(curl -s --connect-timeout 30 --max-time 60 \
+            "https://api.modapi.io/v1/games/$GAME_ID/mods/$MOD_ID/files?version=$VERSION" \
+            -H "Authorization: Bearer $MODIO_TOKEN" \
+            -H "Accept: application/json")
+
+          if echo "$EXISTING_FILES" | grep -q "\"version\":\"$VERSION\""; then
+            echo "Version $VERSION is already uploaded to Mod.io. Skipping duplicate upload."
+            exit 0
+          fi
+
+          echo "Uploading $VERSION to mod.io..."
+
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            --connect-timeout 30 --max-time 300 \
+            -X POST "https://api.modapi.io/v1/games/$GAME_ID/mods/$MOD_ID/files" \
+            -H "Authorization: Bearer $MODIO_TOKEN" \
+            -H "Accept: application/json" \
+            -F "filedata=@dist/BlueprintBook-$VERSION.zip" \
+            --form-string "version=$VERSION" \
+            --form-string "changelog=$CHANGELOG" \
+            -F "active=true")
+
+          BODY=$(cat response.json)
+          echo "Response Body: $BODY"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Successfully published $VERSION to Mod.io!"
+          else
+            echo "::error::Failed to publish to Mod.io (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+
