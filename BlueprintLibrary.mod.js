@@ -342,6 +342,48 @@
     };
   }
 
+  // src/updater.js
+  function compareVersions(current, latest) {
+    const clean = (v) => (v || "").toString().replace(/^v/i, "").trim().split(".").map((n) => parseInt(n, 10) || 0);
+    const cParts = clean(current);
+    const lParts = clean(latest);
+    const maxLength = Math.max(cParts.length, lParts.length);
+    for (let i = 0; i < maxLength; i++) {
+      const c = cParts[i] || 0;
+      const l = lParts[i] || 0;
+      if (l > c) return 1;
+      if (c > l) return -1;
+    }
+    return 0;
+  }
+  async function checkForUpdates(currentVersion, repoSlug = "Skigim/BlueprintBook") {
+    try {
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), 5e3) : null;
+      const response = await fetch(`https://api.github.com/repos/${repoSlug}/releases/latest`, {
+        headers: { "Accept": "application/vnd.github.v3+json" },
+        signal: controller ? controller.signal : void 0
+      });
+      if (timeoutId) clearTimeout(timeoutId);
+      if (!response.ok) return { updateAvailable: false };
+      const data = await response.json();
+      const latestTag = data.tag_name || data.name || "";
+      const downloadUrl = data.html_url || `https://github.com/${repoSlug}/releases/latest`;
+      const releaseNotes = data.body || "";
+      if (compareVersions(currentVersion, latestTag) === 1) {
+        return {
+          updateAvailable: true,
+          latestVersion: latestTag.replace(/^v/i, ""),
+          downloadUrl,
+          releaseNotes
+        };
+      }
+    } catch (err) {
+      console.log("[BlueprintBook] Update check skipped:", err.message || err);
+    }
+    return { updateAvailable: false };
+  }
+
   // src/ui.js
   var NOTIFY = shapez && shapez.enumNotificationType || {
     info: "info",
@@ -349,7 +391,7 @@
     error: "error",
     success: "success"
   };
-  var HUDBlueprintLibrary = class extends shapez.BaseHUDPart {
+  var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
     createElements(parent) {
       this.parent = parent;
       this.activeTagFilter = null;
@@ -432,6 +474,41 @@
     }
     initialize() {
       this.visible = false;
+      this.checkUpdateOnce();
+    }
+    async checkUpdateOnce() {
+      if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
+      _HUDBlueprintLibrary.hasCheckedUpdate = true;
+      const update = await checkForUpdates(METADATA.version);
+      if (update.updateAvailable) {
+        this.showUpdateDialog(update);
+      }
+    }
+    showUpdateDialog({ latestVersion, downloadUrl, releaseNotes }) {
+      const dialog = new shapez.Dialog({
+        app: this.root.app,
+        title: "Update Available!",
+        contentHTML: `
+                <div style="padding: 10px; text-align: center;">
+                    <p style="font-size: 1.1em; margin-bottom: 12px;">A new version of <strong>Blueprint Book</strong> is available!</p>
+                    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; text-align: left; margin-bottom: 16px;">
+                        <div><strong>Installed Version:</strong> v${METADATA.version}</div>
+                        <div><strong>Latest Version:</strong> <span style="color: #4CAF50;">v${latestVersion}</span></div>
+                        ${releaseNotes ? `<div style="margin-top: 8px; font-size: 0.9em; color: #aaa; max-height: 100px; overflow-y: auto;">${releaseNotes}</div>` : ""}
+                    </div>
+                </div>
+            `,
+        buttons: ["cancel:bad:escape", "download:good:enter"],
+        closeButton: true
+      });
+      this.root.hud.parts.dialogs.internalShowDialog(dialog);
+      dialog.buttonSignals.download.add(() => {
+        if (shapez.openStandaloneLink) {
+          shapez.openStandaloneLink(downloadUrl);
+        } else {
+          window.open(downloadUrl, "_blank");
+        }
+      });
     }
     handleSaveHotkey() {
       if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";

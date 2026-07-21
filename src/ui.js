@@ -1,5 +1,7 @@
 import { createTextAreaFormElement } from "../lib/ui.js";
 import { BlueprintStore } from "./store.js";
+import { METADATA } from "./metadata.js";
+import { checkForUpdates } from "./updater.js";
 
 const NOTIFY = (shapez && shapez.enumNotificationType) || {
     info: "info", warning: "warning", error: "error", success: "success",
@@ -103,6 +105,46 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     initialize() {
         this.visible = false;
+        this.checkUpdateOnce();
+    }
+
+    async checkUpdateOnce() {
+        if (HUDBlueprintLibrary.hasCheckedUpdate) return;
+        HUDBlueprintLibrary.hasCheckedUpdate = true;
+
+        const update = await checkForUpdates(METADATA.version);
+        if (update.updateAvailable) {
+            this.showUpdateDialog(update);
+        }
+    }
+
+    showUpdateDialog({ latestVersion, downloadUrl, releaseNotes }) {
+        const dialog = new shapez.Dialog({
+            app: this.root.app,
+            title: "Update Available!",
+            contentHTML: `
+                <div style="padding: 10px; text-align: center;">
+                    <p style="font-size: 1.1em; margin-bottom: 12px;">A new version of <strong>Blueprint Book</strong> is available!</p>
+                    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; text-align: left; margin-bottom: 16px;">
+                        <div><strong>Installed Version:</strong> v${METADATA.version}</div>
+                        <div><strong>Latest Version:</strong> <span style="color: #4CAF50;">v${latestVersion}</span></div>
+                        ${releaseNotes ? `<div style="margin-top: 8px; font-size: 0.9em; color: #aaa; max-height: 100px; overflow-y: auto;">${releaseNotes}</div>` : ''}
+                    </div>
+                </div>
+            `,
+            buttons: ["cancel:bad:escape", "download:good:enter"],
+            closeButton: true
+        });
+
+        this.root.hud.parts.dialogs.internalShowDialog(dialog);
+
+        dialog.buttonSignals.download.add(() => {
+            if (shapez.openStandaloneLink) {
+                shapez.openStandaloneLink(downloadUrl);
+            } else {
+                window.open(downloadUrl, "_blank");
+            }
+        });
     }
 
     handleSaveHotkey() {

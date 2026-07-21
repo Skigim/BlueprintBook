@@ -177,3 +177,39 @@ describe('openImportDialog rendering', () => {
         expect(hudLibrary.render).not.toHaveBeenCalled();
     });
 });
+
+describe('HUDBlueprintLibrary Update Dialog', () => {
+    it('shows update dialog when an update is available', () => {
+        const downloadCbMock = { add: vi.fn() };
+        const mockDialog = {
+            buttonSignals: {
+                download: downloadCbMock
+            }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function (config) {
+            return mockDialog;
+        });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn()
+                    }
+                }
+            }
+        };
+
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.showUpdateDialog({
+            latestVersion: '1.0.2',
+            downloadUrl: 'https://github.com/Skigim/BlueprintBook/releases/latest',
+            releaseNotes: 'New feature release'
+        });
+
+        expect(global.shapez.Dialog).toHaveBeenCalled();
+        expect(mockRoot.hud.parts.dialogs.internalShowDialog).toHaveBeenCalledWith(mockDialog);
+    });
+});
