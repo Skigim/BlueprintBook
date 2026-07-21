@@ -12,5 +12,7 @@ export const METADATA = {
         blueprints: [],
         nextBlueprintId: 1,
         availableTags: [],
+        lastSeenVersion: "",
+        skippedVersion: "",
     },
 };

@@ -31,11 +31,68 @@ export const BlueprintStore = {
             };
         }).filter(Boolean);
 
+        if (typeof mod.settings.lastSeenVersion !== "string") {
+            mod.settings.lastSeenVersion = "";
+        }
+        if (typeof mod.settings.skippedVersion !== "string") {
+            mod.settings.skippedVersion = "";
+        }
+
         const maxId = mod.settings.blueprints.reduce((max, b) => Math.max(max, b.id || 0), 0);
         if (mod.settings.nextBlueprintId <= maxId) {
             mod.settings.nextBlueprintId = maxId + 1;
         }
         this.persist();
+    },
+
+    getLastSeenVersion() {
+        if (this.mod && this.mod.settings && typeof this.mod.settings.lastSeenVersion === "string" && this.mod.settings.lastSeenVersion) {
+            return this.mod.settings.lastSeenVersion;
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                return localStorage.getItem("bplib_last_seen_version") || "";
+            }
+        } catch (e) {}
+        return "";
+    },
+
+    setLastSeenVersion(version) {
+        const v = String(version || "");
+        if (this.mod && this.mod.settings) {
+            this.mod.settings.lastSeenVersion = v;
+            this.persist();
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                localStorage.setItem("bplib_last_seen_version", v);
+            }
+        } catch (e) {}
+    },
+
+    getSkippedVersion() {
+        if (this.mod && this.mod.settings && typeof this.mod.settings.skippedVersion === "string" && this.mod.settings.skippedVersion) {
+            return this.mod.settings.skippedVersion;
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                return localStorage.getItem("bplib_skipped_version") || "";
+            }
+        } catch (e) {}
+        return "";
+    },
+
+    setSkippedVersion(version) {
+        const v = String(version || "");
+        if (this.mod && this.mod.settings) {
+            this.mod.settings.skippedVersion = v;
+            this.persist();
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                localStorage.setItem("bplib_skipped_version", v);
+            }
+        } catch (e) {}
     },
 
     pruneTags() {

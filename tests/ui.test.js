@@ -214,4 +214,43 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
         expect(global.shapez.Dialog).toHaveBeenCalled();
         expect(mockRoot.hud.parts.dialogs.internalShowDialog).toHaveBeenCalledWith(mockDialog);
     });
+
+    it('shows welcome dialog on first load of version and suppresses it when version is already seen', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: {}, saveSettings: () => {} });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn() }
+                }
+            }
+        };
+
+        const hudLibrary1 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary1.showWelcomeDialog = vi.fn();
+
+        // Reset hasCheckedUpdate flag for testing fresh instance
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+
+        // Mock checkForUpdates to return no update
+        const updater = await import('../src/updater.js');
+        vi.spyOn(updater, 'checkForUpdates').mockResolvedValue({ updateAvailable: false });
+
+        await hudLibrary1.checkUpdateOnce();
+
+        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith('1.0.1');
+        expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.1');
+
+        // Simulate subsequent save load or new game session
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+        const hudLibrary2 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary2.showWelcomeDialog = vi.fn();
+
+        await hudLibrary2.checkUpdateOnce();
+
+        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion ('1.0.1')
+        expect(hudLibrary2.showWelcomeDialog).not.toHaveBeenCalled();
+    });
 });

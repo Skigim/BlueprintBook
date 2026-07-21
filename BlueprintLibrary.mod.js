@@ -13,7 +13,9 @@
     settings: {
       blueprints: [],
       nextBlueprintId: 1,
-      availableTags: []
+      availableTags: [],
+      lastSeenVersion: "",
+      skippedVersion: ""
     }
   };
 
@@ -228,11 +230,67 @@
           createdAt: typeof entry.createdAt === "number" ? entry.createdAt : Date.now()
         };
       }).filter(Boolean);
+      if (typeof mod.settings.lastSeenVersion !== "string") {
+        mod.settings.lastSeenVersion = "";
+      }
+      if (typeof mod.settings.skippedVersion !== "string") {
+        mod.settings.skippedVersion = "";
+      }
       const maxId = mod.settings.blueprints.reduce((max, b) => Math.max(max, b.id || 0), 0);
       if (mod.settings.nextBlueprintId <= maxId) {
         mod.settings.nextBlueprintId = maxId + 1;
       }
       this.persist();
+    },
+    getLastSeenVersion() {
+      if (this.mod && this.mod.settings && typeof this.mod.settings.lastSeenVersion === "string" && this.mod.settings.lastSeenVersion) {
+        return this.mod.settings.lastSeenVersion;
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          return localStorage.getItem("bplib_last_seen_version") || "";
+        }
+      } catch (e) {
+      }
+      return "";
+    },
+    setLastSeenVersion(version) {
+      const v = String(version || "");
+      if (this.mod && this.mod.settings) {
+        this.mod.settings.lastSeenVersion = v;
+        this.persist();
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("bplib_last_seen_version", v);
+        }
+      } catch (e) {
+      }
+    },
+    getSkippedVersion() {
+      if (this.mod && this.mod.settings && typeof this.mod.settings.skippedVersion === "string" && this.mod.settings.skippedVersion) {
+        return this.mod.settings.skippedVersion;
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          return localStorage.getItem("bplib_skipped_version") || "";
+        }
+      } catch (e) {
+      }
+      return "";
+    },
+    setSkippedVersion(version) {
+      const v = String(version || "");
+      if (this.mod && this.mod.settings) {
+        this.mod.settings.skippedVersion = v;
+        this.persist();
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("bplib_skipped_version", v);
+        }
+      } catch (e) {
+      }
     },
     pruneTags() {
       const usedTags = /* @__PURE__ */ new Set();
@@ -583,26 +641,16 @@
       if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
       _HUDBlueprintLibrary.hasCheckedUpdate = true;
       const currentVersion = METADATA.version;
-      const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
-      const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
+      const lastSeenVersion = BlueprintStore.getLastSeenVersion();
+      const skippedVersion = BlueprintStore.getSkippedVersion();
       try {
         const update = await checkForUpdates(currentVersion);
         if (update.updateAvailable && update.latestVersion !== skippedVersion) {
           this.showUpdateDialog(update);
-          try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_last_seen_version", currentVersion);
-            }
-          } catch (e) {
-          }
+          BlueprintStore.setLastSeenVersion(currentVersion);
         } else if (lastSeenVersion !== currentVersion) {
           this.showWelcomeDialog(currentVersion);
-          try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_last_seen_version", currentVersion);
-            }
-          } catch (e) {
-          }
+          BlueprintStore.setLastSeenVersion(currentVersion);
         }
       } catch (err) {
         console.error("[BlueprintBook] Update check failed:", err);
@@ -664,9 +712,7 @@
       if (dialog.buttonSignals.skipVersion) {
         dialog.buttonSignals.skipVersion.add(() => {
           try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_skipped_version", latestVersion);
-            }
+            BlueprintStore.setSkippedVersion(latestVersion);
           } catch (e) {
             console.error("[BlueprintBook] Failed to save skipped version:", e);
           }
