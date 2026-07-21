@@ -33,6 +33,10 @@
         width: 600px !important;
         max-width: 90vw;
     }
+    .updateAvailableDialog .dialogInner .content {
+        width: 550px !important;
+        max-width: 90vw;
+    }
 
     /* --- DIALOG CONTAINER --- */
     .bplib-dialog-content {
@@ -188,6 +192,11 @@
     .bplib-action-delete:hover {
         color: #ff0000;
     }
+
+    /* --- HUD OVERLAYS --- */
+    #ingame_HUD_PinnedShapes {
+        top: calc(210px * var(--ui-scale)) !important;
+    }
 `;
 
   // src/store.js
@@ -292,13 +301,15 @@
   };
 
   // lib/ui.js
-  function injectHUDGameMenuButton(modInterface, buttonClass, title, clickHandler) {
+  function extendHUDGameMenu(modInterface, buttonClass, title, clickHandler) {
     modInterface.extendClass(shapez.HUDGameMenu, ({ $old }) => ({
       createElements(parent) {
         $old.createElements.call(this, parent);
         const button = document.createElement("div");
         button.classList.add("button", buttonClass);
-        button.title = title;
+        if (title) {
+          button.title = title;
+        }
         this.element.appendChild(button);
         this.element.style.gridTemplateColumns = `repeat(${this.element.children.length}, 1fr)`;
         this.trackClicks(button, () => {
@@ -308,6 +319,58 @@
             alert(`Menu click error (${buttonClass}): ` + err.message + "\n" + err.stack);
           }
         });
+      }
+    }));
+  }
+  function extendHUDKeybindingOverlay(modInterface) {
+    modInterface.extendClass(shapez.HUDKeybindingOverlay, ({ $old }) => ({
+      createElements(parent) {
+        $old.createElements.call(this, parent);
+        const mapper = this.root.keyMapper;
+        const k = shapez.KEYMAPPINGS;
+        const customBindings = [
+          {
+            // [SELECTION ACTIVE] Save selected area to Blueprint Book
+            label: "Save to Book",
+            keys: [k?.massSelect?.massSelectStart || 17, "+", 80],
+            condition: () => this.anythingSelectedOnMap
+          },
+          {
+            // Open / Toggle Blueprint Book when not placing a blueprint
+            label: "Blueprint Book",
+            keys: [80],
+            condition: () => !this.blueprintPlacementActive
+          }
+        ];
+        for (let i = 0; i < customBindings.length; ++i) {
+          let html = "";
+          const handle = customBindings[i];
+          for (let j = 0; j < handle.keys.length; ++j) {
+            const key = handle.keys[j];
+            if (key === "+") {
+              html += "+";
+            } else if (typeof key === "string") {
+              html += `<code class="keybinding">${key}</code>`;
+            } else {
+              let code = key;
+              if (typeof key === "object" && key !== null) {
+                code = key.keyCode;
+                if (!code && mapper && mapper.getBinding) {
+                  try {
+                    code = mapper.getBinding(key).keyCode;
+                  } catch (e) {
+                  }
+                }
+              }
+              const keyString = shapez.getStringForKeyCode ? shapez.getStringForKeyCode(code || 80) : "P";
+              html += `<code class="keybinding">${keyString}</code>`;
+            }
+          }
+          html += `<label>${handle.label}</label>`;
+          handle.cachedElement = shapez.makeDiv(this.element, null, ["binding"], html);
+          handle.cachedVisibility = false;
+          this.keybindings.push(handle);
+        }
       }
     }));
   }
@@ -384,6 +447,21 @@
     return { updateAvailable: false };
   }
 
+  // src/changelog.js
+  var MOD_CHANGELOG = [
+    {
+      version: "1.0.1",
+      date: "2026-07-21",
+      entries: [
+        "<strong>Native Hotkey Support</strong>: Full keybind integration ('P' to toggle book, 'Ctrl+P' to save blueprint) with custom keybinding overlay hints and rebinding support in settings.",
+        "<strong>Automatic Update Notifications</strong>: You will now be notified automatically when a new update is available, with a handy VIEW ON MOD.IO button to download the latest version in your browser.",
+        "<strong>Welcome Dialog</strong>: A dialog that appears when running a new version for the first time, showing what changed.",
+        "<strong>Cleaner Interface</strong>: Rebuilt the blueprint library popups and card layouts for smoother performance and smaller mod file size."
+      ]
+    }
+  ];
+  var RELEASE_NOTES_1_0_1 = MOD_CHANGELOG[0].entries;
+
   // src/ui.js
   var NOTIFY = shapez && shapez.enumNotificationType || {
     info: "info",
@@ -391,6 +469,18 @@
     error: "error",
     success: "success"
   };
+  function registerNativeChangelogEntry() {
+    if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
+      const id = `Blueprint Book v${METADATA.version}`;
+      if (!shapez.CHANGELOG.some((item) => item.version === id)) {
+        shapez.CHANGELOG.unshift({
+          version: id,
+          date: "2026-07-21",
+          entries: MOD_CHANGELOG[0].entries
+        });
+      }
+    }
+  }
   var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
     createElements(parent) {
       this.parent = parent;
@@ -474,17 +564,65 @@
     }
     initialize() {
       this.visible = false;
+      registerNativeChangelogEntry();
       this.checkUpdateOnce();
     }
     async checkUpdateOnce() {
       if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
       _HUDBlueprintLibrary.hasCheckedUpdate = true;
-      const update = await checkForUpdates(METADATA.version);
-      if (update.updateAvailable) {
+      const currentVersion = METADATA.version;
+      const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
+      const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
+      const update = await checkForUpdates(currentVersion);
+      if (update.updateAvailable && update.latestVersion !== skippedVersion) {
         this.showUpdateDialog(update);
+        try {
+          if (typeof localStorage !== "undefined") {
+            localStorage.setItem("bplib_last_seen_version", update.latestVersion);
+          }
+        } catch (e) {
+        }
+      } else if (lastSeenVersion !== currentVersion) {
+        this.showWelcomeDialog(currentVersion);
+        try {
+          if (typeof localStorage !== "undefined") {
+            localStorage.setItem("bplib_last_seen_version", currentVersion);
+          }
+        } catch (e) {
+        }
+      }
+    }
+    showWelcomeDialog(version) {
+      const entries = Array.isArray(RELEASE_NOTES_1_0_1) ? RELEASE_NOTES_1_0_1 : (RELEASE_NOTES_1_0_1 || "").split("\n").map((l) => l.trim()).filter(Boolean);
+      const notesHtml = entries.map((entry) => `<div style="margin-bottom: 6px; line-height: 1.35; padding-left: 14px; position: relative;"><span style="position: absolute; left: 0; color: #4CAF50;">\u2022</span>${entry}</div>`).join("");
+      const dialog = new shapez.Dialog({
+        app: this.root.app,
+        title: "Welcome to Blueprint Book!",
+        contentHTML: `
+                <div style="padding: 10px; text-align: center;">
+                    <p style="font-size: 1.1em; margin-bottom: 12px;">Thank you for installing <strong>Blueprint Book v${version}</strong>!</p>
+                    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; text-align: left; margin-bottom: 16px;">
+                        <div style="font-weight: bold; margin-bottom: 8px; color: #4CAF50;">What's New:</div>
+                        <div style="font-size: 0.85em; color: #ccc; max-height: 125px; overflow-y: auto; pointer-events: auto;">
+                            ${notesHtml}
+                        </div>
+                    </div>
+                </div>
+            `,
+        buttons: ["ok:good:enter"],
+        closeButton: false
+      });
+      this.root.hud.parts.dialogs.internalShowDialog(dialog);
+      if (dialog.dialogElem) {
+        dialog.dialogElem.classList.add("dialogMods", "updateAvailableDialog");
       }
     }
     showUpdateDialog({ latestVersion, downloadUrl, releaseNotes }) {
+      if (shapez?.T?.dialogs?.buttons) {
+        shapez.T.dialogs.buttons.viewOnModIo = "VIEW ON MOD.IO";
+        shapez.T.dialogs.buttons.skipVersion = "SKIP VERSION";
+      }
+      const notesHtml = (releaseNotes || "").split("\n").map((line) => line.trim()).filter((line) => line.length > 0).map((line) => `<div style="margin-bottom: 6px; line-height: 1.3;">${line}</div>`).join("");
       const dialog = new shapez.Dialog({
         app: this.root.app,
         title: "Update Available!",
@@ -494,21 +632,40 @@
                     <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; text-align: left; margin-bottom: 16px;">
                         <div><strong>Installed Version:</strong> v${METADATA.version}</div>
                         <div><strong>Latest Version:</strong> <span style="color: #4CAF50;">v${latestVersion}</span></div>
-                        ${releaseNotes ? `<div style="margin-top: 8px; font-size: 0.9em; color: #aaa; max-height: 100px; overflow-y: auto;">${releaseNotes}</div>` : ""}
+                        ${notesHtml ? `<div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 0.85em; color: #ccc; max-height: 100px; overflow-y: auto; pointer-events: auto;">${notesHtml}</div>` : ""}
                     </div>
                 </div>
             `,
-        buttons: ["cancel:bad:escape", "download:good:enter"],
-        closeButton: true
+        buttons: ["cancel:bad:escape", "skipVersion:neutral", "viewOnModIo:good:enter"],
+        closeButton: false
       });
       this.root.hud.parts.dialogs.internalShowDialog(dialog);
-      dialog.buttonSignals.download.add(() => {
-        if (shapez.openStandaloneLink) {
-          shapez.openStandaloneLink(downloadUrl);
-        } else {
-          window.open(downloadUrl, "_blank");
-        }
-      });
+      if (dialog.dialogElem) {
+        dialog.dialogElem.classList.add("dialogMods", "updateAvailableDialog");
+      }
+      if (dialog.buttonSignals.skipVersion) {
+        dialog.buttonSignals.skipVersion.add(() => {
+          try {
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem("bplib_skipped_version", latestVersion);
+            }
+          } catch (e) {
+            console.error("[BlueprintBook] Failed to save skipped version:", e);
+          }
+        });
+      }
+      const targetUrl = downloadUrl || "https://mod.io/g/shapez/m/blueprint-book#description";
+      if (dialog.buttonSignals.viewOnModIo) {
+        dialog.buttonSignals.viewOnModIo.add(() => {
+          if (this.root?.app?.platformWrapper?.openExternalLink) {
+            this.root.app.platformWrapper.openExternalLink(targetUrl);
+          } else if (shapez.openStandaloneLink) {
+            shapez.openStandaloneLink(targetUrl);
+          } else {
+            window.open(targetUrl, "_blank");
+          }
+        });
+      }
     }
     handleSaveHotkey() {
       if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
@@ -567,7 +724,6 @@
           this.visible = false;
           this.cleanupDynamicClickDetectors();
         });
-        this.overlay.querySelector("#bplib-search").focus();
       } catch (err) {
         alert("Error in show(): " + err.message + "\n" + err.stack);
       }
@@ -770,10 +926,11 @@
           return library.handleToggleHotkey();
         }
       });
-      injectHUDGameMenuButton(
+      extendHUDKeybindingOverlay(this.modInterface);
+      extendHUDGameMenu(
         this.modInterface,
         "blueprintLibrary",
-        "Blueprint Book",
+        "",
         function() {
           const library = this.root?.hud?.parts?.blueprintLibrary;
           if (!library) {

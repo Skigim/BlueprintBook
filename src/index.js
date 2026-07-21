@@ -2,7 +2,7 @@ import { METADATA } from "./metadata.js";
 import { CSS } from "./styles.js";
 import { BlueprintStore } from "./store.js";
 import { HUDBlueprintLibrary } from "./ui.js";
-import { injectHUDGameMenuButton } from "../lib/ui.js";
+import { extendHUDGameMenu, extendHUDKeybindingOverlay } from "../lib/ui.js";
 
 class BlueprintLibraryMod extends shapez.Mod {
     init() {
@@ -39,11 +39,14 @@ class BlueprintLibraryMod extends shapez.Mod {
             }
         });
 
-        // Inject button into the game menu
-        injectHUDGameMenuButton(
+        // Extend native keybinding hints in bottom-left HUD overlay
+        extendHUDKeybindingOverlay(this.modInterface);
+
+        // Extend native game menu button
+        extendHUDGameMenu(
             this.modInterface,
             "blueprintLibrary",
-            "Blueprint Book",
+            "",
             function () {
                 const library = this.root?.hud?.parts?.blueprintLibrary;
                 if (!library) {

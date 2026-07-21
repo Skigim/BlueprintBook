@@ -1,18 +1,13 @@
 # Changelog
 
-All notable changes to the Blueprint Book mod will be documented in this file.
+All notable changes to the **Blueprint Book** mod will be documented in this file.
 
-## [1.0.1] - 2026-07-17
+## [1.0.1] - 2026-07-21
 
 ### Added
-- **Unit Testing Suite**: Integrated Vitest and jsdom for rapid, robust unit testing of the state management logic.
-- **Test Coverage**: Added comprehensive test coverage for `BlueprintStore` covering blueprint addition, tag pruning, auto-incrementing IDs, and corrupt data recovery.
-- **Documentation**: Added a `docs/` directory and initialized a persistent changelog.
+- **Native Hotkey Support**: Full keybind integration (`P` to toggle book, `Ctrl+P` to save blueprint) with custom keybinding overlay hints and rebinding support in settings.
+- **Automatic Update Notifications**: You will now be notified automatically when a new update is available, with a handy **VIEW ON MOD.IO** button to download the latest version in your browser.
+- **Welcome Dialog**: A dialog that appears when running a new version for the first time, showing what changed.
 
-### Changed
-- **Modularization**: Completely refactored `BlueprintLibrary.mod.js` into an ES6 modular project structure. 
-- **Build System**: Integrated `esbuild` for blazingly fast bundling of the modular source code back into a single deployable mod artifact.
-- **Library Code Extraction**: Separated generic, reusable DOM and UI utility functions into a dedicated `lib/` directory to simplify development of future mods.
-
-### Fixed
-- Fixed edge cases related to empty blueprint names, Windows-style line endings (`\r\n`), and graceful degradation when parsing legacy or corrupted blueprint lists.
+### Improved
+- **Cleaner Interface**: Rebuilt the blueprint library popups and card layouts for smoother performance and smaller mod file size.

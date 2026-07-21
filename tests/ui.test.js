@@ -180,10 +180,12 @@ describe('openImportDialog rendering', () => {
 
 describe('HUDBlueprintLibrary Update Dialog', () => {
     it('shows update dialog when an update is available', () => {
-        const downloadCbMock = { add: vi.fn() };
+        const viewOnModIoCbMock = { add: vi.fn() };
+        const skipVersionCbMock = { add: vi.fn() };
         const mockDialog = {
             buttonSignals: {
-                download: downloadCbMock
+                viewOnModIo: viewOnModIoCbMock,
+                skipVersion: skipVersionCbMock,
             }
         };
 

@@ -14,6 +14,10 @@ export const CSS = `
         width: 600px !important;
         max-width: 90vw;
     }
+    .updateAvailableDialog .dialogInner .content {
+        width: 550px !important;
+        max-width: 90vw;
+    }
 
     /* --- DIALOG CONTAINER --- */
     .bplib-dialog-content {
@@ -168,5 +172,10 @@ export const CSS = `
     }
     .bplib-action-delete:hover {
         color: #ff0000;
+    }
+
+    /* --- HUD OVERLAYS --- */
+    #ingame_HUD_PinnedShapes {
+        top: calc(210px * var(--ui-scale)) !important;
     }
 `;
