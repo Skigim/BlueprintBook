@@ -1,0 +1,66 @@
+name: Publish Release to Mod.io
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-modio:
+    name: Build & Upload to Mod.io
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies & Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package Mod Release Archive
+        run: |
+          mkdir -p dist
+          zip -j dist/BlueprintBook-${{ github.event.release.tag_name }}.zip BlueprintLibrary.mod.js README.md preview.png
+
+      - name: Upload Modfile to Mod.io
+        env:
+          MODIO_TOKEN: ${{ secrets.MODIO_TOKEN }}
+          GAME_ID: ${{ secrets.MODIO_GAME_ID || vars.MODIO_GAME_ID || 'shapez' }}
+          MOD_ID: ${{ secrets.MODIO_MOD_ID || vars.MODIO_MOD_ID || 'blueprint-book' }}
+          VERSION: ${{ github.event.release.tag_name }}
+          CHANGELOG: ${{ github.event.release.body }}
+        run: |
+          if [ -z "$MODIO_TOKEN" ]; then
+            echo "::error::MODIO_TOKEN secret is missing! Please add MODIO_TOKEN under GitHub Repository Secrets."
+            exit 1
+          fi
+
+          echo "Uploading $VERSION to mod.io ($GAME_ID / $MOD_ID)..."
+
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+            "https://api.mod.io/v1/games/$GAME_ID/mods/$MOD_ID/files" \
+            -H "Authorization: Bearer $MODIO_TOKEN" \
+            -H "Accept: application/json" \
+            -F "filedata=@dist/BlueprintBook-$VERSION.zip" \
+            -F "version=$VERSION" \
+            -F "changelog=$CHANGELOG" \
+            -F "active=true")
+
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS" | cut -d':' -f2)
+          BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS/d')
+
+          echo "Response Body: $BODY"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Successfully published $VERSION to Mod.io!"
+          else
+            echo "::error::Failed to publish to Mod.io (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
