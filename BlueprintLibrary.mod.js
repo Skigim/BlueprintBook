@@ -445,7 +445,6 @@
       return "stop_propagation";
     }
     handleToggleHotkey() {
-      if (this.root?.app?.inputMgr?.keysDown?.has(17)) return "stop_propagation";
       if (this.visible) {
         if (this.dialog) this.dialog.closeRequested.dispatch();
       } else {

@@ -125,8 +125,6 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     handleToggleHotkey() {
-        if (this.root?.app?.inputMgr?.keysDown?.has(17)) return "stop_propagation"; // Engine bug: P matches even when Ctrl is held
-        
         if (this.visible) {
             if (this.dialog) this.dialog.closeRequested.dispatch();
         } else {

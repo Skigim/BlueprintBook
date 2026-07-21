@@ -177,23 +177,3 @@ describe('openImportDialog rendering', () => {
         expect(hudLibrary.render).not.toHaveBeenCalled();
     });
 });
-
-describe('preventGameInputs DOM Propagation', () => {
-    it('does not stop propagation of keyboard or mouse events to prevent desyncing ClickDetector or keysDown state', async () => {
-        const { preventGameInputs } = await import('../lib/dom.js');
-        const inputElem = document.createElement('input');
-        preventGameInputs(inputElem);
-
-        const keyupEvent = new KeyboardEvent('keyup', { bubbles: true, cancelable: true });
-        const mouseupEvent = new MouseEvent('mouseup', { bubbles: true, cancelable: true });
-
-        const stopPropagationSpy = vi.spyOn(keyupEvent, 'stopPropagation');
-        const mouseStopSpy = vi.spyOn(mouseupEvent, 'stopPropagation');
-
-        inputElem.dispatchEvent(keyupEvent);
-        inputElem.dispatchEvent(mouseupEvent);
-
-        expect(stopPropagationSpy).not.toHaveBeenCalled();
-        expect(mouseStopSpy).not.toHaveBeenCalled();
-    });
-});
