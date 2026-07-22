@@ -29,17 +29,20 @@ export const CSS = `
         width: 100%;
         height: 70vh;
         max-height: 800px;
+        pointer-events: auto;
     }
     .bplib-toolbar {
         display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
     }
     .bplib-grid {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
         padding-right: 10px;
         display: flex;
         flex-direction: column;
         gap: 10px;
+        pointer-events: auto;
     }
 
     /* --- STATISTICS: TAGS FILTER HEADER --- */

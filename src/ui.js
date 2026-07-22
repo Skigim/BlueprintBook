@@ -37,6 +37,13 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.render();
         });
 
+        const grid = this.overlay.querySelector('#bplib-grid');
+        if (grid) {
+            grid.addEventListener('wheel', (e) => {
+                e.stopPropagation();
+            }, { passive: true });
+        }
+
         this.dialog.trackClicks(this.overlay.querySelector('#bplib-btn-import'), () => {
             this.openImportDialog();
         });
