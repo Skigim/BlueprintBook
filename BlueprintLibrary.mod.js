@@ -4,7 +4,7 @@
     id: "bp-library",
     name: "Blueprint Library",
     author: "Skigim",
-    version: "1.0.1",
+    version: "1.0.2",
     website: "",
     description: "A full rewrite of KiitikM's Blueprint Library mod. Features include: perfectly integrated native-style UI, custom tagging and filtering system, unified edit dialogs, and memory leak fixes.",
     minimumGameVersion: ">=1.5.0",
@@ -518,6 +518,14 @@
   // src/changelog.js
   var MOD_CHANGELOG = [
     {
+      version: "1.0.2",
+      date: "2026-07-22",
+      entries: [
+        "<strong>Welcome Dialog Fix</strong>: Fixed an issue where the welcome popup would re-appear every time you loaded your save game.",
+        "<strong>Library Scrolling Fix</strong>: Fixed scrolling issues in the blueprint book window."
+      ]
+    },
+    {
       version: "1.0.1",
       date: "2026-07-21",
       entries: [
@@ -533,6 +541,7 @@
     const entry = MOD_CHANGELOG.find((item) => item.version.replace(/^v/i, "").trim() === cleanVer);
     return entry ? entry.entries : [];
   }
+  var RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
   var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
   // src/ui.js

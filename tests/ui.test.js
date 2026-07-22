@@ -240,8 +240,8 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         await hudLibrary1.checkUpdateOnce();
 
-        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith('1.0.1');
-        expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.1');
+        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith('1.0.2');
+        expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.2');
 
         // Simulate subsequent save load or new game session
         HUDBlueprintLibrary.hasCheckedUpdate = false;
@@ -250,7 +250,7 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         await hudLibrary2.checkUpdateOnce();
 
-        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion ('1.0.1')
+        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion ('1.0.2')
         expect(hudLibrary2.showWelcomeDialog).not.toHaveBeenCalled();
     });
 });
