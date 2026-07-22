@@ -214,4 +214,107 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
         expect(global.shapez.Dialog).toHaveBeenCalled();
         expect(mockRoot.hud.parts.dialogs.internalShowDialog).toHaveBeenCalledWith(mockDialog);
     });
+
+    it('shows welcome dialog on first load of version and suppresses it when version is already seen', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: {}, saveSettings: () => {} });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn() }
+                }
+            }
+        };
+
+        const hudLibrary1 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary1.showWelcomeDialog = vi.fn();
+
+        // Reset hasCheckedUpdate flag for testing fresh instance
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+
+        // Mock checkForUpdates to return no update
+        const updater = await import('../src/updater.js');
+        vi.spyOn(updater, 'checkForUpdates').mockResolvedValue({ updateAvailable: false });
+
+        await hudLibrary1.checkUpdateOnce();
+
+        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith('1.0.2');
+        expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.2');
+
+        // Simulate subsequent save load or new game session
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+        const hudLibrary2 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary2.showWelcomeDialog = vi.fn();
+
+        await hudLibrary2.checkUpdateOnce();
+
+        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion ('1.0.2')
+        expect(hudLibrary2.showWelcomeDialog).not.toHaveBeenCalled();
+    });
 });
+
+describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
+    it('defines min-height: 0 and pointer-events: auto on .bplib-grid and pointer-events: auto on .bplib-dialog-content in styles.js', async () => {
+        const { CSS } = await import('../src/styles.js');
+
+        // Check CSS rules for .bplib-dialog-content
+        expect(CSS).toMatch(/\.bplib-dialog-content\s*\{[^}]*pointer-events:\s*auto;/);
+
+        // Check CSS rules for .bplib-grid
+        expect(CSS).toMatch(/\.bplib-grid\s*\{[^}]*min-height:\s*0;/);
+        expect(CSS).toMatch(/\.bplib-grid\s*\{[^}]*pointer-events:\s*auto;/);
+    });
+
+    it('attaches a wheel event listener to #bplib-grid that calls stopPropagation', async () => {
+        const mockDialogElem = document.createElement('div');
+        const mockOverlay = document.createElement('div');
+        mockOverlay.innerHTML = `
+            <div class="bplib-dialog-content">
+                <div id="bplib-search"></div>
+                <div id="bplib-btn-import"></div>
+                <div id="bplib-filter-tags"></div>
+                <div id="bplib-grid" class="bplib-grid"></div>
+            </div>
+        `;
+
+        const mockDialog = {
+            dialogElem: mockDialogElem,
+            element: mockOverlay,
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn() },
+                    blueprintPlacer: { currentBlueprint: { set: vi.fn() } }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.render = vi.fn();
+
+        hudLibrary.show();
+
+        const gridElem = mockOverlay.querySelector('#bplib-grid');
+        expect(gridElem).not.toBeNull();
+
+        // Dispatch a wheel event and verify stopPropagation is called
+        const wheelEvent = new Event('wheel', { bubbles: true, cancelable: true });
+        const stopPropagationSpy = vi.spyOn(wheelEvent, 'stopPropagation');
+
+        gridElem.dispatchEvent(wheelEvent);
+
+        expect(stopPropagationSpy).toHaveBeenCalled();
+    });
+});
+

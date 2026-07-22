@@ -1,6 +1,6 @@
 {
   "name": "blueprintbook",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "![Preview](preview.png)",
   "main": "BlueprintLibrary.mod.js",
   "type": "module",

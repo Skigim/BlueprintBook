@@ -128,5 +128,15 @@ describe('BlueprintStore Logic', () => {
             // max ID is now 10, so nextBlueprintId should bump to 11
             expect(mockMod.settings.nextBlueprintId).toBe(11);
         });
+
+        it('persists and retrieves lastSeenVersion and skippedVersion via mod settings', () => {
+            BlueprintStore.setLastSeenVersion('1.0.1');
+            expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.1');
+            expect(mockMod.settings.lastSeenVersion).toBe('1.0.1');
+
+            BlueprintStore.setSkippedVersion('1.0.2');
+            expect(BlueprintStore.getSkippedVersion()).toBe('1.0.2');
+            expect(mockMod.settings.skippedVersion).toBe('1.0.2');
+        });
     });
 });

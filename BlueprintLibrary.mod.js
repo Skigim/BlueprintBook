@@ -4,7 +4,7 @@
     id: "bp-library",
     name: "Blueprint Library",
     author: "Skigim",
-    version: "1.0.1",
+    version: "1.0.2",
     website: "",
     description: "A full rewrite of KiitikM's Blueprint Library mod. Features include: perfectly integrated native-style UI, custom tagging and filtering system, unified edit dialogs, and memory leak fixes.",
     minimumGameVersion: ">=1.5.0",
@@ -13,7 +13,9 @@
     settings: {
       blueprints: [],
       nextBlueprintId: 1,
-      availableTags: []
+      availableTags: [],
+      lastSeenVersion: "",
+      skippedVersion: ""
     }
   };
 
@@ -48,17 +50,20 @@
         width: 100%;
         height: 70vh;
         max-height: 800px;
+        pointer-events: auto;
     }
     .bplib-toolbar {
         display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
     }
     .bplib-grid {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
         padding-right: 10px;
         display: flex;
         flex-direction: column;
         gap: 10px;
+        pointer-events: auto;
     }
 
     /* --- STATISTICS: TAGS FILTER HEADER --- */
@@ -228,11 +233,67 @@
           createdAt: typeof entry.createdAt === "number" ? entry.createdAt : Date.now()
         };
       }).filter(Boolean);
+      if (typeof mod.settings.lastSeenVersion !== "string") {
+        mod.settings.lastSeenVersion = "";
+      }
+      if (typeof mod.settings.skippedVersion !== "string") {
+        mod.settings.skippedVersion = "";
+      }
       const maxId = mod.settings.blueprints.reduce((max, b) => Math.max(max, b.id || 0), 0);
       if (mod.settings.nextBlueprintId <= maxId) {
         mod.settings.nextBlueprintId = maxId + 1;
       }
       this.persist();
+    },
+    getLastSeenVersion() {
+      if (this.mod && this.mod.settings && typeof this.mod.settings.lastSeenVersion === "string" && this.mod.settings.lastSeenVersion) {
+        return this.mod.settings.lastSeenVersion;
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          return localStorage.getItem("bplib_last_seen_version") || "";
+        }
+      } catch (e) {
+      }
+      return "";
+    },
+    setLastSeenVersion(version) {
+      const v = String(version || "");
+      if (this.mod && this.mod.settings) {
+        this.mod.settings.lastSeenVersion = v;
+        this.persist();
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("bplib_last_seen_version", v);
+        }
+      } catch (e) {
+      }
+    },
+    getSkippedVersion() {
+      if (this.mod && this.mod.settings && typeof this.mod.settings.skippedVersion === "string" && this.mod.settings.skippedVersion) {
+        return this.mod.settings.skippedVersion;
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          return localStorage.getItem("bplib_skipped_version") || "";
+        }
+      } catch (e) {
+      }
+      return "";
+    },
+    setSkippedVersion(version) {
+      const v = String(version || "");
+      if (this.mod && this.mod.settings) {
+        this.mod.settings.skippedVersion = v;
+        this.persist();
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("bplib_skipped_version", v);
+        }
+      } catch (e) {
+      }
     },
     pruneTags() {
       const usedTags = /* @__PURE__ */ new Set();
@@ -457,6 +518,14 @@
   // src/changelog.js
   var MOD_CHANGELOG = [
     {
+      version: "1.0.2",
+      date: "2026-07-22",
+      entries: [
+        "<strong>Welcome Dialog Fix</strong>: Fixed an issue where the welcome popup would re-appear every time you loaded your save game.",
+        "<strong>Library Scrolling Fix</strong>: Fixed scrolling issues in the blueprint book window."
+      ]
+    },
+    {
       version: "1.0.1",
       date: "2026-07-21",
       entries: [
@@ -472,6 +541,7 @@
     const entry = MOD_CHANGELOG.find((item) => item.version.replace(/^v/i, "").trim() === cleanVer);
     return entry ? entry.entries : [];
   }
+  var RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
   var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
   // src/ui.js
@@ -506,6 +576,12 @@
         this.searchQuery = e.target.value.toLowerCase();
         this.render();
       });
+      const grid = this.overlay.querySelector("#bplib-grid");
+      if (grid) {
+        grid.addEventListener("wheel", (e) => {
+          e.stopPropagation();
+        }, { passive: true });
+      }
       this.dialog.trackClicks(this.overlay.querySelector("#bplib-btn-import"), () => {
         this.openImportDialog();
       });
@@ -583,26 +659,16 @@
       if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
       _HUDBlueprintLibrary.hasCheckedUpdate = true;
       const currentVersion = METADATA.version;
-      const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
-      const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
+      const lastSeenVersion = BlueprintStore.getLastSeenVersion();
+      const skippedVersion = BlueprintStore.getSkippedVersion();
       try {
         const update = await checkForUpdates(currentVersion);
         if (update.updateAvailable && update.latestVersion !== skippedVersion) {
           this.showUpdateDialog(update);
-          try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_last_seen_version", currentVersion);
-            }
-          } catch (e) {
-          }
+          BlueprintStore.setLastSeenVersion(currentVersion);
         } else if (lastSeenVersion !== currentVersion) {
           this.showWelcomeDialog(currentVersion);
-          try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_last_seen_version", currentVersion);
-            }
-          } catch (e) {
-          }
+          BlueprintStore.setLastSeenVersion(currentVersion);
         }
       } catch (err) {
         console.error("[BlueprintBook] Update check failed:", err);
@@ -664,9 +730,7 @@
       if (dialog.buttonSignals.skipVersion) {
         dialog.buttonSignals.skipVersion.add(() => {
           try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_skipped_version", latestVersion);
-            }
+            BlueprintStore.setSkippedVersion(latestVersion);
           } catch (e) {
             console.error("[BlueprintBook] Failed to save skipped version:", e);
           }

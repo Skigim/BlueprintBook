@@ -37,6 +37,13 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.render();
         });
 
+        const grid = this.overlay.querySelector('#bplib-grid');
+        if (grid) {
+            grid.addEventListener('wheel', (e) => {
+                e.stopPropagation();
+            }, { passive: true });
+        }
+
         this.dialog.trackClicks(this.overlay.querySelector('#bplib-btn-import'), () => {
             this.openImportDialog();
         });
@@ -129,8 +136,8 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         HUDBlueprintLibrary.hasCheckedUpdate = true;
 
         const currentVersion = METADATA.version;
-        const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
-        const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
+        const lastSeenVersion = BlueprintStore.getLastSeenVersion();
+        const skippedVersion = BlueprintStore.getSkippedVersion();
 
         try {
             const update = await checkForUpdates(currentVersion);
@@ -138,19 +145,11 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             if (update.updateAvailable && update.latestVersion !== skippedVersion) {
                 // Scenario A: A newer version is published on GitHub / Mod.io
                 this.showUpdateDialog(update);
-                try {
-                    if (typeof localStorage !== "undefined") {
-                        localStorage.setItem("bplib_last_seen_version", currentVersion);
-                    }
-                } catch (e) {}
+                BlueprintStore.setLastSeenVersion(currentVersion);
             } else if (lastSeenVersion !== currentVersion) {
                 // Scenario B: First time running this installed version (e.g. v1.0.1 welcome dialog)
                 this.showWelcomeDialog(currentVersion);
-                try {
-                    if (typeof localStorage !== "undefined") {
-                        localStorage.setItem("bplib_last_seen_version", currentVersion);
-                    }
-                } catch (e) {}
+                BlueprintStore.setLastSeenVersion(currentVersion);
             }
         } catch (err) {
             console.error("[BlueprintBook] Update check failed:", err);
@@ -235,9 +234,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         if (dialog.buttonSignals.skipVersion) {
             dialog.buttonSignals.skipVersion.add(() => {
                 try {
-                    if (typeof localStorage !== "undefined") {
-                        localStorage.setItem("bplib_skipped_version", latestVersion);
-                    }
+                    BlueprintStore.setSkippedVersion(latestVersion);
                 } catch (e) {
                     console.error("[BlueprintBook] Failed to save skipped version:", e);
                 }
