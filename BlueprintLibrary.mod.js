@@ -563,7 +563,11 @@
         if (title) {
           button.title = title;
         }
-        this.element.appendChild(button);
+        if (this.saveButton) {
+          this.element.insertBefore(button, this.saveButton);
+        } else {
+          this.element.appendChild(button);
+        }
         this.element.style.gridTemplateColumns = `repeat(${this.element.children.length}, 1fr)`;
         this.trackClicks(button, () => {
           try {
