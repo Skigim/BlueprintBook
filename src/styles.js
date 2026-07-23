@@ -3,10 +3,21 @@ export const BUTTON_ICON = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org
 export const CSS = `
     #ingame_HUD_GameMenu > .button.blueprintLibrary,
     #ingame_HUD_GameMenu > button.blueprintLibrary {
+        grid-column: 3;
         background-image: url("${BUTTON_ICON}");
         background-position: center center;
         background-repeat: no-repeat;
         background-size: 70%;
+    }
+
+    #ingame_HUD_GameMenu > .button.save,
+    #ingame_HUD_GameMenu > button.save {
+        grid-column: 4 !important;
+    }
+
+    #ingame_HUD_GameMenu > .button.settings,
+    #ingame_HUD_GameMenu > button.settings {
+        grid-column: 5 !important;
     }
 
     /* --- DIALOG OVERRIDES --- */
