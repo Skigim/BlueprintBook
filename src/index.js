@@ -5,11 +5,83 @@ import { HUDBlueprintLibrary } from "./ui.js";
 import { extendHUDGameMenu, extendHUDKeybindingOverlay } from "../lib/ui.js";
 
 class BlueprintLibraryMod extends shapez.Mod {
-    init() {
+    async init() {
+        console.log("[BlueprintBook] BlueprintLibraryMod.init() called.");
+
         // Expose the modLoader so the HUD component can access BPStrings for blueprint parsing
         shapez.BlueprintLibraryModLoader = this.modLoader;
 
-        BlueprintStore.init(this);
+        let readFileAsync = null;
+        let listKeysAsync = null;
+        try {
+            const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
+            console.log("[BlueprintBook] Setting up storage reader. G_IS_STANDALONE =", isStandalone);
+
+            let idbStorage = null;
+            let electronStorage = null;
+
+            if (shapez.StorageImplBrowserIndexedDB) {
+                try {
+                    idbStorage = new shapez.StorageImplBrowserIndexedDB(this.app);
+                    await idbStorage.initialize();
+                } catch (e) {
+                    console.warn("[BlueprintBook] IDB storage init failed:", e);
+                }
+            }
+
+            if (shapez.StorageImplElectron) {
+                try {
+                    electronStorage = new shapez.StorageImplElectron(this.app);
+                    await electronStorage.initialize();
+                } catch (e) {
+                    console.warn("[BlueprintBook] Electron storage init failed:", e);
+                }
+            }
+
+            const mainStorage = isStandalone && electronStorage ? electronStorage : (idbStorage || electronStorage);
+
+            readFileAsync = async (filename) => {
+                if (mainStorage) {
+                    try {
+                        const res = await mainStorage.readFileAsync(filename);
+                        if (res) return res;
+                    } catch (e) {}
+                }
+                const fallbackStorage = mainStorage === idbStorage ? electronStorage : idbStorage;
+                if (fallbackStorage) {
+                    try {
+                        const res = await fallbackStorage.readFileAsync(filename);
+                        if (res) return res;
+                    } catch (e) {}
+                }
+                throw "file_not_found";
+            };
+
+            listKeysAsync = async () => {
+                const keys = [];
+                if (idbStorage && idbStorage.database) {
+                    try {
+                        const idbKeys = await new Promise((resolve) => {
+                            const tx = idbStorage.database.transaction(["files"], "readonly");
+                            const req = tx.objectStore("files").getAllKeys();
+                            req.onsuccess = () => resolve(req.result || []);
+                            req.onerror = () => resolve([]);
+                        });
+                        keys.push(...idbKeys);
+                    } catch (e) {}
+                }
+                return keys;
+            };
+
+            console.log("[BlueprintBook] Storage readers created successfully.");
+        } catch (e) {
+            console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
+        }
+
+        console.log("[BlueprintBook] Initializing BlueprintStore...");
+        await BlueprintStore.init(this, readFileAsync, listKeysAsync);
+        console.log("[BlueprintBook] BlueprintStore initialized.");
+
         this.modInterface.registerCss(CSS);
         this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);
 

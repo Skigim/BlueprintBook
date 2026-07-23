@@ -4,10 +4,16 @@ All notable changes to the **Blueprint Book** mod will be documented in this fil
 
 ## [1.0.2] - 2026-07-22
 
-### Fixed
+### New
+
+- **Blueprint Preview**: Blueprint Book cards now show a preview of the blueprint.
+- **Blueprint Cost**: Blueprint Book cards now show the cost of the blueprint. Should be compatible with other mods that remove said cost, but please report if the cost is still shown when it shouldn't be.
+
+### Bugs Squashed
 
 - **Welcome Dialog**: Fixed an issue where the welcome popup would re-appear every time you loaded your save game.
 - **Library Scrolling**: Fixed scrolling issues in the blueprint book window.
+- **Blueprint Migration**: Fixed an issue where blueprints didn't persist across updated versions.
 
 ## [1.0.1] - 2026-07-21
 

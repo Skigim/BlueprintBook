@@ -76,14 +76,15 @@ export const CSS = `
     /* --- SHOP: UPGRADE CARDS --- */
     .bplib-upgrade {
         display: grid;
-        grid-template-columns: auto 1fr auto;
-        grid-template-rows: 20px auto;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: 24px 1fr;
         background: #eee;
         border-radius: 7px;
-        padding: 5px 10px;
-        height: 85px;
-        grid-row-gap: 1px;
+        padding: 8px 12px;
+        height: 95px;
+        grid-row-gap: 4px;
         margin-bottom: 4px;
+        box-sizing: border-box;
     }
     html[data-theme="dark"] .bplib-upgrade {
         background: #474b58;
@@ -91,13 +92,13 @@ export const CSS = `
     }
 
     .bplib-upgrade .title {
-        grid-column: 1 / 3;
+        grid-column: 1 / 2;
         grid-row: 1 / 2;
         display: flex;
-        flex-direction: row-reverse;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: flex-start;
         color: #333;
+        overflow: hidden;
     }
     html[data-theme="dark"] .bplib-upgrade .title { color: #fff; }
 
@@ -109,24 +110,9 @@ export const CSS = `
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .bplib-upgrade .title .tier {
-        margin-right: 9px;
-        background: #49babe;
-        border-radius: 12px;
-        text-transform: uppercase;
-        color: #fff;
-        text-align: center;
-        font-weight: bold;
-        min-width: 50px;
-        padding: 3px 8px;
-        font-family: "GameFont", sans-serif;
-        font-size: 14px;
-        text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    }
 
     .bplib-upgrade .description {
-        grid-column: 3 / 4;
+        grid-column: 2 / 3;
         grid-row: 1 / 2;
         color: #aaa;
         font-size: 13px;
@@ -137,26 +123,44 @@ export const CSS = `
         gap: 10px;
     }
 
-    .bplib-upgrade .icon {
+    .bplib-upgrade .requirements {
         grid-column: 1 / 2;
         grid-row: 2 / 3;
         display: flex;
         align-items: center;
-        justify-content: center;
     }
 
-    .bplib-upgrade .requirements {
-        grid-column: 2 / 3;
-        grid-row: 2 / 3;
+    .bplib-upgrade .requirement {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .bplib-upgrade .requirement .shape {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #2e3440;
         display: flex;
         align-items: center;
-        margin-left: 10px;
-        color: #aaa;
+        justify-content: center;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .bplib-upgrade .requirement .amount {
+        background: #55c767;
+        color: #ffffff;
         font-family: "GameFont", sans-serif;
+        font-size: 13px;
+        font-weight: bold;
+        padding: 2px 10px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
     }
 
     .bplib-upgrade .bplib-upgrade-actions {
-        grid-column: 3 / 4;
+        grid-column: 2 / 3;
         grid-row: 2 / 3;
         display: flex;
         align-items: center;

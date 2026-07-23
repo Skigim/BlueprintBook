@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shapez Blueprint Book UI Brainstorming & Native Component Sandbox</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap');
+
+        :root {
+            --game-font: 'Outfit', sans-serif;
+            --bg-dialog: #343a46;
+            --card-bg: #474b58;
+            --shape-bg: #2e3440;
+            --pill-fulfilled: #55c767;
+            --pill-unfulfilled: #5a6070;
+            --pill-text: #ffffff;
+            --accent-blue: #499bea;
+            --accent-teal: #49babe;
+            --accent-orange: #ff6644;
+            --text-title: #ffffff;
+            --text-sub: #a0a6b5;
+        }
+
+        body {
+            margin: 0;
+            padding: 40px;
+            background-color: #1e222b;
+            font-family: var(--game-font);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            user-select: none;
+        }
+
+        h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #eceff4;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 36px;
+            margin-bottom: 16px;
+            color: #499bea;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid rgba(73, 155, 234, 0.3);
+            padding-bottom: 6px;
+            width: 100%;
+            max-width: 760px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--text-sub);
+            margin-bottom: 24px;
+        }
+
+        /* --- DIALOG CONTAINER --- */
+        .preview-dialog-container {
+            width: 760px;
+            background: var(--bg-dialog);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-sizing: border-box;
+        }
+
+        /* --- SECTION 1: NATIVE UPGRADES MENU REFERENCE --- */
+        .upgrade-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 16px 20px;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            grid-template-rows: auto auto;
+            row-gap: 14px;
+            column-gap: 16px;
+            align-items: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        }
+
+        .upgrade-header {
+            grid-column: 1 / 3;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .tier-badge {
+            background: var(--accent-teal);
+            color: #fff;
+            font-weight: 800;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .upgrade-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-title);
+        }
+
+        .upgrade-stats {
+            grid-column: 3 / 4;
+            text-align: right;
+            color: var(--text-sub);
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .requirements-container {
+            grid-column: 1 / 3;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .requirement-item {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .shape-icon-wrapper {
+            position: relative;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: var(--shape-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .shape-icon-wrapper canvas {
+            width: 40px;
+            height: 40px;
+            display: block;
+        }
+
+        .amount-pill {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--pill-text);
+            padding: 3px 10px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+            white-space: nowrap;
+        }
+
+        .amount-pill.fulfilled { background: var(--pill-fulfilled); }
+        .amount-pill.unfulfilled { background: var(--pill-unfulfilled); }
+
+        .btn-upgrade {
+            grid-column: 3 / 4;
+            background: #55c767;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 20px;
+            font-family: var(--game-font);
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(85, 199, 103, 0.3);
+        }
+
+        /* --- SECTION 2: BLUEPRINT BOOK CARDS (BRAINSTORMING) --- */
+        
+        .bp-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 14px 18px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            grid-template-rows: auto auto;
+            row-gap: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            transition: transform 0.15 ease, box-shadow 0.15s ease;
+        }
+
+        .bp-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+        }
+
+        /* Card Row 1: Left Title */
+        .bp-card-title {
+            grid-column: 1 / 2;
+            grid-row: 1 / 2;
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Card Row 1: Far Right Tags & Delete */
+        .bp-card-meta {
+            grid-column: 2 / 3;
+            grid-row: 1 / 2;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--text-sub);
+        }
+
+        .bp-tag {
+            background: rgba(255,255,255,0.08);
+            color: #d8dee9;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .bp-delete-btn {
+            background: transparent;
+            color: #ff6666;
+            font-weight: bold;
+            font-size: 15px;
+            border: none;
+            cursor: pointer;
+            padding: 0 4px;
+            transition: color 0.1s ease, transform 0.1s ease;
+        }
+
+        .bp-delete-btn:hover {
+            color: #ff3333;
+            transform: scale(1.2);
+        }
+
+        /* Card Row 2: Left Requirement (Shape Canvas + Pill) */
+        .bp-card-cost {
+            grid-column: 1 / 2;
+            grid-row: 2 / 3;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Card Row 2: Right Actions */
+        .bp-card-actions {
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Native Button Styling */
+        .game-btn {
+            background: #499bea;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-family: var(--game-font);
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: background 0.1s ease, transform 0.1s ease;
+        }
+
+        .game-btn:hover {
+            background: #5ba6f1;
+            transform: translateY(-1px);
+        }
+
+        .game-btn.secondary {
+            background: rgba(255, 255, 255, 0.12);
+            color: #e5e9f0;
+        }
+
+        .game-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Shapez Blueprint Book UI Sandbox</h1>
+    <div class="subtitle">Live Brainstorming & Component Architecture Specification</div>
+
+    <!-- SECTION 1: NATIVE UPGRADES MENU REFERENCE -->
+    <h2>1. Native Upgrades Menu Requirement Reference</h2>
+    <div class="preview-dialog-container">
+        <div class="upgrade-card">
+            <div class="upgrade-header">
+                <span class="tier-badge">TIER VII</span>
+                <span class="upgrade-title">Belts, Distributor & Tunnels</span>
+            </div>
+            <div class="upgrade-stats">Speed x7.00 → x8.00</div>
+
+            <div class="requirements-container">
+                <div class="requirement-item">
+                    <div class="shape-icon-wrapper">
+                        <canvas id="canvas-star" width="80" height="80"></canvas>
+                    </div>
+                    <div class="amount-pill fulfilled">49.1k / 25k</div>
+                </div>
+                <div class="requirement-item">
+                    <div class="shape-icon-wrapper">
+                        <canvas id="canvas-circle" width="80" height="80"></canvas>
+                    </div>
+                    <div class="amount-pill fulfilled">31.4k / 50k</div>
+                </div>
+            </div>
+
+            <button class="btn-upgrade">UPGRADE</button>
+        </div>
+    </div>
+
+    <!-- SECTION 2: BLUEPRINT BOOK CARD CONCEPTS -->
+    <h2>2. Proposed Blueprint Book Cards (Live Concepts)</h2>
+    <div class="preview-dialog-container">
+
+        <!-- CONCEPT 1: Standard Blueprint Card -->
+        <div class="bp-card">
+            <div class="bp-card-title">
+                MAM Layer Balancer 4x4
+            </div>
+            <div class="bp-card-meta">
+                <span>Tags:</span>
+                <span class="bp-tag">MAM</span>
+                <span class="bp-tag">Belts</span>
+                <button class="bp-delete-btn" title="Delete Blueprint">✕</button>
+            </div>
+
+            <div class="bp-card-cost">
+                <div class="requirement-item" style="flex-direction: row; gap: 8px;">
+                    <div class="shape-icon-wrapper" style="width: 44px; height: 44px;">
+                        <canvas id="canvas-bp1" width="80" height="80"></canvas>
+                    </div>
+                    <div class="amount-pill fulfilled" style="font-size: 14px; padding: 4px 12px;">90</div>
+                </div>
+            </div>
+
+            <div class="bp-card-actions">
+                <button class="game-btn secondary">Preview</button>
+                <button class="game-btn">Equip</button>
+                <button class="game-btn secondary">Edit</button>
+            </div>
+        </div>
+
+        <!-- CONCEPT 2: Compact Card with Single Requirement Pill -->
+        <div class="bp-card">
+            <div class="bp-card-title">
+                90-Degree High-Speed Rotator
+            </div>
+            <div class="bp-card-meta">
+                <span>Tags:</span>
+                <span class="bp-tag">Rotators</span>
+                <button class="bp-delete-btn" title="Delete Blueprint">✕</button>
+            </div>
+
+            <div class="bp-card-cost">
+                <div class="requirement-item" style="flex-direction: row; gap: 8px;">
+                    <div class="shape-icon-wrapper" style="width: 44px; height: 44px;">
+                        <canvas id="canvas-bp2" width="80" height="80"></canvas>
+                    </div>
+                    <div class="amount-pill fulfilled" style="font-size: 14px; padding: 4px 12px;">260</div>
+                </div>
+            </div>
+
+            <div class="bp-card-actions">
+                <button class="game-btn secondary">Preview</button>
+                <button class="game-btn">Equip</button>
+                <button class="game-btn secondary">Edit</button>
+            </div>
+        </div>
+
+        <!-- CONCEPT 3: Minimal Card (No Tags) -->
+        <div class="bp-card">
+            <div class="bp-card-title">
+                Compact 4-Way Junction
+            </div>
+            <div class="bp-card-meta">
+                <span style="font-size: 12px; font-style: italic;">Tags: None</span>
+                <button class="bp-delete-btn" title="Delete Blueprint">✕</button>
+            </div>
+
+            <div class="bp-card-cost">
+                <div class="requirement-item" style="flex-direction: row; gap: 8px;">
+                    <div class="shape-icon-wrapper" style="width: 44px; height: 44px;">
+                        <canvas id="canvas-bp3" width="80" height="80"></canvas>
+                    </div>
+                    <div class="amount-pill fulfilled" style="font-size: 14px; padding: 4px 12px;">4</div>
+                </div>
+            </div>
+
+            <div class="bp-card-actions">
+                <button class="game-btn secondary">Preview</button>
+                <button class="game-btn">Equip</button>
+                <button class="game-btn secondary">Edit</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function drawShape(canvasId, shapeType, color) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+            const r = w * 0.38;
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.fillStyle = color || '#35a5ea';
+            ctx.strokeStyle = '#1e222b';
+            ctx.lineWidth = 3;
+
+            if (shapeType === 'star') {
+                ctx.fillStyle = '#ea35e0';
+                ctx.beginPath();
+                for (let i = 0; i < 4; i++) {
+                    const angle = (i * Math.PI) / 2;
+                    const x1 = cx + Math.cos(angle) * r;
+                    const y1 = cy + Math.sin(angle) * r;
+                    const x2 = cx + Math.cos(angle + Math.PI / 4) * (r * 0.4);
+                    const y2 = cy + Math.sin(angle + Math.PI / 4) * (r * 0.4);
+                    if (i === 0) ctx.moveTo(x1, y1);
+                    else ctx.lineTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                }
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+            } else if (shapeType === 'circle') {
+                ctx.fillStyle = '#e5e9f0';
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fill(); ctx.stroke();
+            } else if (shapeType === 'blueprint-shape') {
+                ctx.fillStyle = '#35a5ea';
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fill(); ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+                ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+                ctx.stroke();
+            }
+        }
+
+        window.onload = function() {
+            drawShape('canvas-star', 'star');
+            drawShape('canvas-circle', 'circle');
+            drawShape('canvas-bp1', 'blueprint-shape');
+            drawShape('canvas-bp2', 'blueprint-shape');
+            drawShape('canvas-bp3', 'blueprint-shape');
+        };
+    </script>
+</body>
+</html>

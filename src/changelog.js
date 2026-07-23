@@ -4,7 +4,8 @@ export const MOD_CHANGELOG = [
         date: "2026-07-22",
         entries: [
             "<strong>Welcome Dialog Fix</strong>: Fixed an issue where the welcome popup would re-appear every time you loaded your save game.",
-            "<strong>Library Scrolling Fix</strong>: Fixed scrolling issues in the blueprint book window."
+            "<strong>Library Scrolling Fix</strong>: Fixed scrolling issues in the blueprint book window.",
+            "<strong>Blueprint Migration Fix</strong>: Fixed an issue where blueprints didn't persist across updated versions."
         ]
     },
     {

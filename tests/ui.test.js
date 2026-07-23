@@ -11,6 +11,11 @@ global.shapez = {
         }
         cleanup() {}
     },
+    FormElementInput: class {
+        constructor(opts) {
+            Object.assign(this, opts);
+        }
+    },
     BlueprintLibraryModLoader: {
         mods: []
     }
@@ -267,6 +272,13 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
         expect(CSS).toMatch(/\.bplib-grid\s*\{[^}]*pointer-events:\s*auto;/);
     });
 
+    it('defines grid-column: 2 / 3 for .bplib-upgrade-actions matching 2-column grid layout in styles.js', async () => {
+        const { CSS } = await import('../src/styles.js');
+
+        expect(CSS).toMatch(/\.bplib-upgrade\s*\{[^}]*grid-template-columns:\s*1fr\s+auto;/);
+        expect(CSS).toMatch(/\.bplib-upgrade\s+\.bplib-upgrade-actions\s*\{[^}]*grid-column:\s*2\s*\/\s*3;/);
+    });
+
     it('attaches a wheel event listener to #bplib-grid that calls stopPropagation', async () => {
         const mockDialogElem = document.createElement('div');
         const mockOverlay = document.createElement('div');
@@ -316,5 +328,175 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
 
         expect(stopPropagationSpy).toHaveBeenCalled();
     });
+
+    it('adds dialogUpgrades class to dialog.dialogElem when show() is called', async () => {
+        const mockDialogElem = document.createElement('div');
+        const mockOverlay = document.createElement('div');
+        const mockDialog = {
+            dialogElem: mockDialogElem,
+            element: mockOverlay,
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn() }
+                }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.render = vi.fn();
+
+        hudLibrary.show();
+
+        expect(mockDialogElem.classList.contains('dialogUpgrades')).toBe(true);
+    });
 });
+
+describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        global.shapez.FormElementInput = class {
+            constructor(opts) {
+                Object.assign(this, opts);
+            }
+        };
+
+        mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    },
+                    blueprintPlacer: {
+                        currentBlueprint: { set: vi.fn() }
+                    }
+                },
+                signals: {
+                    notification: { dispatch: vi.fn() },
+                    pasteBlueprintRequested: { dispatch: vi.fn() }
+                }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.registerClickDetector = vi.fn();
+    });
+
+    it('resets visible to false and cleans up dialog when equipBlueprint is called', () => {
+        let mockDialogInstance;
+        global.shapez.Dialog = class {
+            constructor(opts) {
+                const elem = document.createElement('div');
+                elem.innerHTML = opts.contentHTML || opts.content || '';
+                this.dialogElem = elem;
+                this.element = elem;
+                this.trackClicks = vi.fn();
+                this.closeRequested = { add: vi.fn(), dispatch: vi.fn() };
+                mockDialogInstance = this;
+            }
+        };
+        global.shapez.ClickDetector = class { constructor() { this.click = { add: vi.fn() }; } };
+        global.shapez.Blueprint = class { constructor(e) {} };
+        global.shapez.BlueprintLibraryModLoader = {
+            mods: [{
+                metadata: { id: 'bp-string' },
+                constructor: { deserialize: () => [{ uid: 1 }] }
+            }]
+        };
+
+        hudLibrary.show();
+        expect(hudLibrary.visible).toBe(true);
+
+        hudLibrary.equipBlueprint('VALID_BP_STRING');
+
+        expect(mockRoot.hud.parts.dialogs.closeDialog).toHaveBeenCalledWith(mockDialogInstance);
+        expect(hudLibrary.visible).toBe(false);
+        expect(hudLibrary.dialog).toBeNull();
+    });
+
+    it('removes summary badge and BP tier badge entirely from card, and styles PREVIEW button natively', () => {
+        const bp = { id: 'bp_1', name: 'Test BP', value: 'VALID_BP_STRING', tags: ['mining'] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+
+        // Summary badge and BP tier badge should be completely removed
+        const summaryBadge = card.querySelector('.bplib-summary-badge');
+        expect(summaryBadge).toBeNull();
+
+        const tierBadge = card.querySelector('.tier');
+        expect(tierBadge).toBeNull();
+
+        // PREVIEW button should carry native Shapez button classes
+        const previewBtn = card.querySelector('.bplib-btn-preview');
+        expect(previewBtn).not.toBeNull();
+        expect(previewBtn.classList.contains('button')).toBe(true);
+        expect(previewBtn.classList.contains('styledButton')).toBe(true);
+    });
+
+    it('renders search input with native input-text class and configures import dialog with defaultValue "" and closeButton false', () => {
+        hudLibrary.show();
+        const searchInput = hudLibrary.overlay.querySelector('#bplib-search');
+        expect(searchInput.classList.contains('input-text')).toBe(true);
+
+        let capturedFormOpts = null;
+        global.shapez.DialogWithForm = vi.fn().mockImplementation(function (opts) {
+            capturedFormOpts = opts;
+            this.element = document.createElement('div');
+            this.closeRequested = { add: vi.fn() };
+            return this;
+        });
+
+        hudLibrary.openImportDialog();
+        expect(capturedFormOpts).not.toBeNull();
+        expect(capturedFormOpts.closeButton).toBe(false);
+        const nameFormElem = capturedFormOpts.formElements.find(e => e.id === 'name');
+        expect(nameFormElem).toBeDefined();
+        expect(nameFormElem.defaultValue).toBe('');
+    });
+});
+
+describe('Task 2: Card className Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() },
+                    blueprintPlacer: { currentBlueprint: { set: vi.fn() } }
+                },
+                signals: { notification: { dispatch: vi.fn(), pasteBlueprintRequested: { dispatch: vi.fn() } } }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+    });
+
+    it('sets card className to "bplib-upgrade shopCard"', () => {
+        const bp = { id: 'bp_1', name: 'Test BP', value: 'VALID_BP_STRING', tags: ['mining'] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+        expect(card.classList.contains('bplib-upgrade')).toBe(true);
+        expect(card.classList.contains('shopCard')).toBe(true);
+    });
+});
+
 

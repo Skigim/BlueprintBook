@@ -2,6 +2,7 @@ import { createTextAreaFormElement } from "../lib/ui.js";
 import { BlueprintStore } from "./store.js";
 import { METADATA } from "./metadata.js";
 import { checkForUpdates } from "./updater.js";
+import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement } from "./preview.js";
 
 const NOTIFY = (shapez && shapez.enumNotificationType) || {
     info: "info", warning: "warning", error: "error", success: "success",
@@ -31,11 +32,13 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     bindEvents() {
         const searchInput = this.overlay.querySelector('#bplib-search');
-        searchInput.onpointerdown = () => searchInput.focus();
-        searchInput.addEventListener('input', (e) => {
-            this.searchQuery = e.target.value.toLowerCase();
-            this.render();
-        });
+        if (searchInput) {
+            searchInput.onpointerdown = () => searchInput.focus();
+            searchInput.addEventListener('input', (e) => {
+                this.searchQuery = e.target.value.toLowerCase();
+                this.render();
+            });
+        }
 
         const grid = this.overlay.querySelector('#bplib-grid');
         if (grid) {
@@ -75,19 +78,21 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
         this.root.hud.parts.dialogs.internalShowDialog(dialog);
 
-        dialog.buttonSignals.ok.add(() => {
-            const name = nameInput.getValue() || "New Blueprint";
-            const str = stringInput.getValue();
-            const tagsStr = tagsInput.getValue();
+        if (dialog.buttonSignals && dialog.buttonSignals.ok) {
+            dialog.buttonSignals.ok.add(() => {
+                const name = nameInput.getValue() || "New Blueprint";
+                const str = stringInput.getValue();
+                const tagsStr = tagsInput.getValue();
 
-            if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
+                if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
 
-            const newTags = tagsStr.split(",")
-                .map(t => t.trim())
-                .filter(t => t.length > 0);
+                const newTags = tagsStr.split(",")
+                    .map(t => t.trim())
+                    .filter(t => t.length > 0);
 
-            onSubmit(name, str, newTags);
-        });
+                onSubmit(name, str, newTags);
+            });
+        }
     }
 
     openImportDialog(initialString = "") {
@@ -109,12 +114,16 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     cleanupDynamicClickDetectors() {
         if (this.dynamicClickDetectors) {
             for (const d of this.dynamicClickDetectors) {
-                d.cleanup();
-                const index = this.clickDetectors.indexOf(d);
-                if (index >= 0) this.clickDetectors.splice(index, 1);
+                if (d && typeof d.cleanup === "function") {
+                    d.cleanup();
+                }
+                if (this.clickDetectors) {
+                    const index = this.clickDetectors.indexOf(d);
+                    if (index >= 0) this.clickDetectors.splice(index, 1);
+                }
             }
+            this.dynamicClickDetectors = [];
         }
-        this.dynamicClickDetectors = [];
     }
 
     trackDynamicClick(element, handler) {
@@ -286,9 +295,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     cleanup() {
         super.cleanup();
-        if (this.dialog) {
-            this.dialog.closeRequested.dispatch();
-        }
+        this.cleanupDynamicClickDetectors();
+        this.visible = false;
+        this.dialog = null;
+        this.overlay = null;
     }
 
     show() {
@@ -316,7 +326,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.root.hud.parts.dialogs.internalShowDialog(this.dialog);
             
             // Add required shapez CSS classes so our optionParent and dialogModsMod elements are styled correctly
-            this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog");
+            this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog", "dialogUpgrades");
             
             this.visible = true;
             this.overlay = this.dialog.element || document.querySelector('.ingameDialog:last-child');
@@ -337,9 +347,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     close() {
-        if (this.dialog) {
-            this.dialog.closeRequested.dispatch();
+        if (this.dialog && this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
+            this.root.hud.parts.dialogs.closeDialog(this.dialog);
         }
+        this.cleanup();
     }
 
     notify(message, type) {
@@ -357,7 +368,9 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             if (entities) {
                 const blueprint = new shapez.Blueprint(entities);
                 this.root.hud.parts.blueprintPlacer.currentBlueprint.set(blueprint);
-                this.root.hud.signals.pasteBlueprintRequested.dispatch();
+                if (this.root.hud.signals && this.root.hud.signals.pasteBlueprintRequested) {
+                    this.root.hud.signals.pasteBlueprintRequested.dispatch();
+                }
                 this.notify("Blueprint equipped!", NOTIFY.success);
                 this.close();
             } else {
@@ -399,67 +412,71 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.notify("Error rendering Blueprint Book. Check console.", NOTIFY.error);
         }
     }
-
     _createBlueprintCard(bp, trackClick) {
         const card = document.createElement('div');
-        card.className = 'bplib-upgrade';
-        
+        card.className = 'bplib-upgrade shopCard';
+
         const titleDiv = document.createElement('div');
         titleDiv.className = 'title';
         
         const nameDiv = document.createElement('div');
         nameDiv.className = 'name';
-        nameDiv.innerText = bp.name;
-        
-        const tierDiv = document.createElement('div');
-        tierDiv.className = 'tier';
-        tierDiv.innerText = 'BP';
-        
+        nameDiv.textContent = bp.name || 'Untitled';
+
         titleDiv.appendChild(nameDiv);
-        titleDiv.appendChild(tierDiv);
 
         const descDiv = document.createElement('div');
         descDiv.className = 'description';
-        descDiv.innerText = `Tags: ${(bp.tags || []).join(', ') || 'None'}`;
+        descDiv.textContent = `Tags: ${(bp.tags || []).join(', ') || 'None'}`;
         
         const delBtn = document.createElement('button');
         delBtn.className = 'bplib-action-delete';
         delBtn.title = 'Delete Blueprint';
-        delBtn.innerText = 'X';
+        delBtn.textContent = 'X';
         trackClick(delBtn, () => {
             this.deleteBlueprint(bp);
         });
         descDiv.appendChild(delBtn);
 
-        const iconDiv = document.createElement('div');
-        iconDiv.className = 'icon';
-
         const reqDiv = document.createElement('div');
         reqDiv.className = 'requirements';
+
+        const cost = getBlueprintCost(this.root, bp.value);
+        if (cost !== null && cost !== undefined) {
+            const costElem = renderBlueprintCostElement(this.root, cost, 24);
+            reqDiv.appendChild(costElem);
+        }
 
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'bplib-upgrade-actions';
 
+        const previewBtn = document.createElement('button');
+        previewBtn.className = 'button styledButton bplib-btn-preview';
+        previewBtn.textContent = 'PREVIEW';
+        trackClick(previewBtn, () => {
+            openBlueprintPreviewDialog(this.root, bp, () => this.equipBlueprint(bp.value));
+        });
+
         const equipBtn = document.createElement('button');
         equipBtn.className = 'button styledButton good bplib-btn-equip';
-        equipBtn.innerText = 'EQUIP';
+        equipBtn.textContent = 'EQUIP';
         trackClick(equipBtn, () => {
             this.equipBlueprint(bp.value);
         });
 
         const editBtn = document.createElement('button');
         editBtn.className = 'button styledButton bplib-btn-edit';
-        editBtn.innerText = 'EDIT';
+        editBtn.textContent = 'EDIT';
         trackClick(editBtn, () => {
             this.editBlueprint(bp);
         });
 
+        actionsDiv.appendChild(previewBtn);
         actionsDiv.appendChild(equipBtn);
         actionsDiv.appendChild(editBtn);
 
         card.appendChild(titleDiv);
         card.appendChild(descDiv);
-        card.appendChild(iconDiv);
         card.appendChild(reqDiv);
         card.appendChild(actionsDiv);
 

@@ -13,7 +13,16 @@ Whenever you start a new conversation in this workspace, you MUST perform the fo
      - If you receive the timeout notification before the subagent completes, forcefully release the lock (e.g. `Remove-Item .memory\.extracting.lock`), log the failure, and proceed to step 3.
 3. **Read Memory State**: After the catch-up completes (or if no catch-up was needed), you MUST use `view_file` to read `.memory/essence.md` and `.memory/notebook.md` to instantly get up to speed on the current state of the project.
 4. **Schedule Periodic Extraction**: Use the `/schedule` tool to schedule a recurring cron job (e.g., `CronExpression: "*/10 * * * *", Prompt: "Check if memory extraction is needed"`).
-5. **Handle Cron Triggers & Idle Detection**: Whenever you receive a notification from the cron job, you should run `python .memory/prep_extraction.py <YOUR_TRANSCRIPT_PATH>` synchronously via `run_command` (with `Cwd` set to your active workspace). 
+5. **Handle Cron Triggers & Idle Detection**: Whenever you receive a notification from the cron job, you should run `python .memory/prep_extraction.py <YOUR_TRANSCRIPT_PATH>` synchronously via `run_command` (with `Cwd` set to your active workspace).
    - If it outputs `[MEMORY_EXTRACTION_READY]`, spawn the `memory-extractor` subagent and yield until it completes or times out, exactly as described in Step 2.
    - **Idle Check**: After reading `.memory/essence.md`, if `essence.md` returns or indicates an `IDLE` state for that turn (e.g., all tasks complete, workspace clean, no active background task or pending execution), or if `prep_extraction.py` outputs `[KILL_CRON]`, you MUST immediately use the `manage_task` tool to kill/disable the background cron task (the task ID is the sender of the cron notification message).
 6. **Restarting Cron**: If you previously killed the memory cron, you MUST restart it (following Step 4) the next time the USER sends a message with active work.
+
+# UI Implementation Rules
+
+Before implementing or modifying any modal dialogs, UI components, or form elements using the native Shapez API, you MUST review the reference document at `docs/shapez_dialog_api.md`.
+This document contains critical constraints around constructor arguments (e.g., contentHTML vs content, formElements vs elements), string-format button definitions, and live DOM binding lifecycles that prevent runtime crashes and undefined rendering.
+
+# Workspace Instruction Files
+
+At the start of every turn, you MUST check and review any instruction, rule, or system guideline files present in the current workspace or `.agents/` folder (such as `INSTRUCTIONS.md`, `CURSOR.md`, `CLAUDE.md`, `RULES.md`, `.agents/INSTRUCTIONS.md`, etc.). All guidelines contained in these workspace instruction files MUST be strictly followed alongside `AGENTS.md`.

@@ -1,8 +1,23 @@
 export const BlueprintStore = {
     mod: null,
 
-    init(mod) {
+    async init(mod, readFileAsync = null, listKeysAsync = null) {
         this.mod = mod;
+
+        if (!mod.settings || typeof mod.settings !== "object") {
+            mod.settings = {};
+        }
+
+        if (!Array.isArray(mod.settings.blueprints)) {
+            mod.settings.blueprints = [];
+        }
+
+        console.log(`[BlueprintBook] BlueprintStore.init() - Current stored blueprints count: ${mod.settings.blueprints.length}`);
+        console.log(`[BlueprintBook] readFileAsync helper available: ${typeof readFileAsync === "function"}`);
+
+        // Always check and merge legacy blueprints if any were missed
+        await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+
         if (!Array.isArray(mod.settings.blueprints)) mod.settings.blueprints = [];
         if (typeof mod.settings.nextBlueprintId !== "number" || mod.settings.nextBlueprintId < 1) {
             mod.settings.nextBlueprintId = 1;
@@ -42,7 +57,195 @@ export const BlueprintStore = {
         if (mod.settings.nextBlueprintId <= maxId) {
             mod.settings.nextBlueprintId = maxId + 1;
         }
+        console.log(`[BlueprintBook] Init complete. Total blueprints in store: ${mod.settings.blueprints.length}, nextID: ${mod.settings.nextBlueprintId}`);
         this.persist();
+    },
+
+    async migrateLegacySettings(mod, readFileAsync, listKeysAsync) {
+        console.log("[BlueprintBook] Starting legacy settings migration check...");
+        const currentBlueprints = Array.isArray(mod.settings.blueprints) ? mod.settings.blueprints : [];
+        const existingValues = new Set(currentBlueprints.map(bp => bp && bp.value).filter(Boolean));
+        const existingNames = new Set(currentBlueprints.map(bp => bp && bp.name).filter(Boolean));
+
+        let migratedAny = false;
+
+        // 1. Try reading from previous Shapez storage files via the injected readFileAsync
+        if (typeof readFileAsync === "function") {
+            try {
+                const candidateFiles = await this.getDynamicCandidateFiles(mod, listKeysAsync);
+                console.log("[BlueprintBook] Candidate legacy storage files to check:", candidateFiles);
+
+                for (const file of candidateFiles) {
+                    try {
+                        console.log(`[BlueprintBook] Attempting to read candidate file: "${file}"`);
+                        const raw = await readFileAsync(file);
+                        if (raw) {
+                            console.log(`[BlueprintBook] -> File "${file}" found! Content length: ${raw.length} bytes.`);
+                            const parsed = JSON.parse(raw);
+                            if (parsed && Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
+                                console.log(`[BlueprintBook] -> Found ${parsed.blueprints.length} blueprints in "${file}". Merging...`);
+                                for (const bp of parsed.blueprints) {
+                                    if (bp && (bp.value || bp.name)) {
+                                        if (!existingValues.has(bp.value) && !existingNames.has(bp.name)) {
+                                            currentBlueprints.push(bp);
+                                            if (bp.value) existingValues.add(bp.value);
+                                            if (bp.name) existingNames.add(bp.name);
+                                            migratedAny = true;
+                                            console.log(`[BlueprintBook]   [MIGRATED] Blueprint "${bp.name}" (value len: ${bp.value ? bp.value.length : 0})`);
+                                        } else {
+                                            console.log(`[BlueprintBook]   [SKIPPED] Duplicate blueprint "${bp.name}"`);
+                                        }
+                                    }
+                                }
+                                if (Array.isArray(parsed.availableTags)) {
+                                    mod.settings.availableTags = mod.settings.availableTags || [];
+                                    parsed.availableTags.forEach(t => {
+                                        if (!mod.settings.availableTags.includes(t)) {
+                                            mod.settings.availableTags.push(t);
+                                        }
+                                    });
+                                }
+                            } else {
+                                console.log(`[BlueprintBook] -> File "${file}" has no valid blueprints array.`);
+                            }
+                        } else {
+                            console.log(`[BlueprintBook] -> File "${file}" returned empty content.`);
+                        }
+                    } catch (e) {
+                        console.log(`[BlueprintBook] -> Candidate file "${file}" read result: not found or parse error (${e})`);
+                    }
+                }
+            } catch (err) {
+                console.warn("[BlueprintBook] Migration read failure:", err);
+            }
+        } else {
+            console.log("[BlueprintBook] No readFileAsync provided. Skipping storage file scan.");
+        }
+
+        // 2. Fallback to localStorage keys
+        try {
+            if (typeof localStorage !== "undefined") {
+                console.log("[BlueprintBook] ALL localStorage keys found:", Object.keys(localStorage));
+                const legacyKeys = [
+                    "bplib_blueprints",
+                    "blueprint_library_blueprints",
+                    "blueprints",
+                    "bp_library_settings",
+                ];
+                console.log("[BlueprintBook] Checking localStorage legacy keys:", legacyKeys);
+                for (const key of legacyKeys) {
+                    const item = localStorage.getItem(key);
+                    if (item) {
+                        console.log(`[BlueprintBook] -> Found item in localStorage key "${key}"!`);
+                        try {
+                            const parsed = JSON.parse(item);
+                            const bps = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.blueprints) ? parsed.blueprints : null);
+                            if (bps && bps.length > 0) {
+                                console.log(`[BlueprintBook] -> Found ${bps.length} blueprints in localStorage key "${key}". Merging...`);
+                                for (const bp of bps) {
+                                    if (bp && (bp.value || bp.name)) {
+                                        if (!existingValues.has(bp.value) && !existingNames.has(bp.name)) {
+                                            currentBlueprints.push(bp);
+                                            if (bp.value) existingValues.add(bp.value);
+                                            if (bp.name) existingNames.add(bp.name);
+                                            migratedAny = true;
+                                            console.log(`[BlueprintBook]   [MIGRATED] Blueprint "${bp.name}" from localStorage`);
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn(`[BlueprintBook] Error parsing localStorage key "${key}":`, e);
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+
+        if (migratedAny) {
+            console.log(`[BlueprintBook] Migration succeeded! Merged blueprints. Total now: ${currentBlueprints.length}`);
+            mod.settings.blueprints = currentBlueprints;
+        } else {
+            console.log("[BlueprintBook] Migration finished. No new blueprints were added.");
+        }
+    },
+
+    async getDynamicCandidateFiles(mod, listKeysAsync = null) {
+        const modId = (mod && mod.meta && mod.meta.id) ? mod.meta.id : "bp-library";
+        const currentVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "";
+        const currentFile = `modsettings_${modId}__${currentVersion}.json`;
+
+        const candidates = new Set();
+
+        // 1. Dynamic key listing from IndexedDB
+        if (typeof listKeysAsync === "function") {
+            try {
+                const idbKeys = await listKeysAsync();
+                console.log("[BlueprintBook] ALL IndexedDB storage keys found:", idbKeys);
+                for (const key of idbKeys) {
+                    if (typeof key === "string" && key !== currentFile) {
+                        if (key.includes("modsettings") || key.includes("bp") || key.includes("blueprint") || key.includes("library")) {
+                            candidates.add(key);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("[BlueprintBook] Failed to list IndexedDB keys:", e);
+            }
+        }
+
+        // Semver-based version generator
+        const knownIds = Array.from(new Set([
+            modId,
+            "bp-library",
+            "bp_library",
+            "BlueprintLibrary",
+            "blueprint_library",
+            "blueprint-library",
+            "BlueprintBook",
+            "bp-book",
+            "bp_book",
+            "blueprintbook"
+        ]));
+        const versionSet = new Set();
+
+        if (currentVersion) {
+            const parts = currentVersion.split(".").map(n => parseInt(n, 10));
+            if (parts.length >= 3 && !parts.some(isNaN)) {
+                const [major, minor, patch] = parts;
+                for (let p = patch - 1; p >= 0; p--) {
+                    versionSet.add(`${major}.${minor}.${p}`);
+                    versionSet.add(`${major}.${minor}`);
+                }
+                for (let m = minor - 1; m >= 0; m--) {
+                    versionSet.add(`${major}.${m}.0`);
+                    versionSet.add(`${major}.${m}`);
+                }
+                for (let maj = major - 1; maj >= 0; maj--) {
+                    versionSet.add(`${maj}.0.0`);
+                    versionSet.add(`${maj}.0`);
+                }
+            } else if (parts.length === 2 && !parts.some(isNaN)) {
+                const [major, minor] = parts;
+                for (let m = minor - 1; m >= 0; m--) {
+                    versionSet.add(`${major}.${m}`);
+                }
+            }
+        }
+
+        // Standard fallback versions
+        ["1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach(v => versionSet.add(v));
+
+        for (const id of knownIds) {
+            for (const ver of versionSet) {
+                const filename = `modsettings_${id}__${ver}.json`;
+                if (filename !== currentFile) {
+                    candidates.add(filename);
+                }
+            }
+        }
+
+        return Array.from(candidates);
     },
 
     getLastSeenVersion() {
@@ -165,9 +368,11 @@ export const BlueprintStore = {
 
     persist() {
         try {
-            if (this.mod.saveSettings) this.mod.saveSettings();
+            const count = this.mod && this.mod.settings && Array.isArray(this.mod.settings.blueprints) ? this.mod.settings.blueprints.length : 0;
+            console.log(`[BlueprintBook] Persisting store settings to storage file... (Total blueprints: ${count})`);
+            if (this.mod && this.mod.saveSettings) this.mod.saveSettings();
         } catch (err) {
-            console.error("[bp-book] Failed to save settings", err);
+            console.error("[BlueprintBook] Failed to save settings:", err);
         }
     },
 };
