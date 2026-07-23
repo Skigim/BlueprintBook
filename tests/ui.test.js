@@ -499,4 +499,72 @@ describe('Task 2: Card className Specs', () => {
     });
 });
 
+describe('Reward-Based Blueprint Unlock Gating', () => {
+    let mockRoot;
+    let hudLibrary;
+    let showInfoSpy;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        showInfoSpy = vi.fn();
+
+        mockRoot = {
+            app: {},
+            hubGoals: {
+                isRewardUnlocked: vi.fn()
+            },
+            hud: {
+                parts: {
+                    dialogs: { showInfo: showInfoSpy, internalShowDialog: vi.fn(), closeDialog: vi.fn() },
+                    massSelector: { selectedUids: new Set(['uid1', 'uid2']) }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            },
+            entityMgr: { findByUid: vi.fn(uid => ({ id: uid })) }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.registerClickDetector = vi.fn();
+        hudLibrary.initialize();
+    });
+
+    it('blocks show() before level 12 and displays blueprintsNotUnlocked dialog', () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(false);
+
+        hudLibrary.show();
+
+        expect(showInfoSpy).toHaveBeenCalled();
+        expect(hudLibrary.visible).toBe(false);
+        expect(hudLibrary.dialog).toBeFalsy();
+    });
+
+    it('allows show() after level 12 unlock', () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(true);
+
+        hudLibrary.show();
+
+        expect(showInfoSpy).not.toHaveBeenCalled();
+        expect(hudLibrary.visible).toBe(true);
+        expect(hudLibrary.dialog).not.toBeNull();
+    });
+
+    it('blocks handleSaveHotkey() before level 12 and displays blueprintsNotUnlocked dialog', () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(false);
+
+        const result = hudLibrary.handleSaveHotkey();
+
+        expect(result).toBe('stop_propagation');
+        expect(showInfoSpy).toHaveBeenCalled();
+    });
+
+    it('blocks equipBlueprint() before level 12 and displays blueprintsNotUnlocked dialog', () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(false);
+
+        hudLibrary.equipBlueprint('VALID_BP_STRING');
+
+        expect(showInfoSpy).toHaveBeenCalled();
+    });
+});
+
 

@@ -581,18 +581,19 @@
         $old.createElements.call(this, parent);
         const mapper = this.root.keyMapper;
         const k = shapez.KEYMAPPINGS;
+        const isUnlocked = () => !this.root.hubGoals || typeof this.root.hubGoals.isRewardUnlocked === "function" && this.root.hubGoals.isRewardUnlocked(shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints");
         const customBindings = [
           {
             // [SELECTION ACTIVE] Save selected area to Blueprint Book
             label: "Save to Book",
             keys: [k?.massSelect?.massSelectStart || 17, "+", 80],
-            condition: () => this.anythingSelectedOnMap
+            condition: () => this.anythingSelectedOnMap && isUnlocked()
           },
           {
             // Open / Toggle Blueprint Book when not placing a blueprint
             label: "Blueprint Book",
             keys: [80],
-            condition: () => !this.blueprintPlacementActive
+            condition: () => !this.blueprintPlacementActive && isUnlocked()
           }
         ];
         for (let i = 0; i < customBindings.length; ++i) {
@@ -1021,8 +1022,9 @@
   var MOD_CHANGELOG = [
     {
       version: "1.0.2",
-      date: "2026-07-22",
+      date: "2026-07-23",
       entries: [
+        "<strong>Level 12 Reward Gate</strong>: Blueprint Book functionality is now gated behind the level 12 blueprint reward unlock, matching native blueprint rules.",
         "<strong>Welcome Dialog Fix</strong>: Fixed an issue where the welcome popup would re-appear every time you loaded your save game.",
         "<strong>Library Scrolling Fix</strong>: Fixed scrolling issues in the blueprint book window.",
         "<strong>Blueprint Migration Fix</strong>: Fixed an issue where blueprints didn't persist across updated versions."
@@ -1260,8 +1262,27 @@
         });
       }
     }
+    isBlueprintsUnlocked() {
+      if (this.root && this.root.hubGoals && typeof this.root.hubGoals.isRewardUnlocked === "function") {
+        const reward = shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints";
+        return this.root.hubGoals.isRewardUnlocked(reward);
+      }
+      return true;
+    }
+    showBlueprintsNotUnlocked() {
+      if (this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
+        const dialogsT = shapez && shapez.T && shapez.T.dialogs && shapez.T.dialogs.blueprintsNotUnlocked;
+        const title = dialogsT && dialogsT.title || "Blueprints Locked";
+        const desc = dialogsT && dialogsT.desc || "Unlocks at level 12!";
+        this.root.hud.parts.dialogs.showInfo(title, desc);
+      }
+    }
     handleSaveHotkey() {
       if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
+      if (!this.isBlueprintsUnlocked()) {
+        this.showBlueprintsNotUnlocked();
+        return "stop_propagation";
+      }
       const selectedUids = this.root.hud.parts.massSelector.selectedUids;
       if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
       const bpMod = shapez.BlueprintLibraryModLoader.mods.find((m) => m.metadata.id === "bp-string");
@@ -1289,6 +1310,10 @@
     show() {
       try {
         if (this.dialog) return;
+        if (!this.isBlueprintsUnlocked()) {
+          this.showBlueprintsNotUnlocked();
+          return;
+        }
         this.dialog = new shapez.Dialog({
           app: this.root.app,
           title: "Blueprint Book",
@@ -1335,6 +1360,10 @@
       }
     }
     equipBlueprint(blueprintString) {
+      if (!this.isBlueprintsUnlocked()) {
+        this.showBlueprintsNotUnlocked();
+        return;
+      }
       try {
         const modLoader = shapez.BlueprintLibraryModLoader;
         const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");

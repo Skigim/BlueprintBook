@@ -2,10 +2,11 @@
 
 All notable changes to the **Blueprint Book** mod will be documented in this file.
 
-## [1.0.2] - 2026-07-22
+## [1.0.2] - 2026-07-23
 
-### New
+### Added
 
+- **Level 12 Reward Gate**: Blueprint Book functionality (opening UI, hotkeys, and equipping blueprints) is now gated behind the level 12 blueprint reward unlock, matching native game behavior.
 - **Blueprint Preview**: Blueprint Book cards now show a preview of the blueprint.
 - **Blueprint Cost**: Blueprint Book cards now show the cost of the blueprint. Should be compatible with other mods that remove said cost, but please report if the cost is still shown when it shouldn't be.
 
