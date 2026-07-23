@@ -3,6 +3,7 @@ export const MOD_CHANGELOG = [
         version: "1.0.2",
         date: "2026-07-23",
         entries: [
+            "<strong>HUD Placement</strong>: Moved Blueprint Book icon to the 3rd slot in the in-game menu.",
             "<strong>Level 12 Reward Gate</strong>: Blueprint Book functionality is now gated behind the level 12 blueprint reward unlock, matching native blueprint rules.",
             "<strong>Welcome Dialog Fix</strong>: Fixed an issue where the welcome popup would re-appear every time you loaded your save game.",
             "<strong>Library Scrolling Fix</strong>: Fixed scrolling issues in the blueprint book window.",
