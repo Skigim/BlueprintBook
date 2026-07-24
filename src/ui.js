@@ -2,7 +2,7 @@ import { createTextAreaFormElement } from "../lib/ui.js";
 import { BlueprintStore } from "./store.js";
 import { METADATA } from "./metadata.js";
 import { checkForUpdates } from "./updater.js";
-import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement } from "./preview.js";
+import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities } from "./preview.js";
 
 const NOTIFY = (shapez && shapez.enumNotificationType) || {
     info: "info", warning: "warning", error: "error", success: "success",
@@ -16,11 +16,33 @@ export function registerNativeChangelogEntry() {
         if (!shapez.CHANGELOG.some(item => item.version === id)) {
             shapez.CHANGELOG.unshift({
                 version: id,
-                date: "2026-07-21",
+                date: (MOD_CHANGELOG[0] && MOD_CHANGELOG[0].date) || "2026-07-24",
                 entries: MOD_CHANGELOG[0].entries
             });
         }
     }
+}
+
+export function getLockedEntitiesInBlueprint(root, entities) {
+    if (!entities || !Array.isArray(entities) || !root) return [];
+    const locked = [];
+    for (let i = 0; i < entities.length; i++) {
+        const entity = entities[i];
+        const staticComp = entity.components?.StaticMapEntity;
+        const meta = staticComp?.getMetaBuilding ? staticComp.getMetaBuilding() : null;
+        if (meta) {
+            let unlocked = true;
+            if (root.hubGoals && typeof root.hubGoals.isBuildingUnlocked === "function") {
+                unlocked = root.hubGoals.isBuildingUnlocked(meta);
+            } else if (typeof meta.getIsUnlocked === "function") {
+                unlocked = meta.getIsUnlocked(root);
+            }
+            if (!unlocked) {
+                locked.push(entity);
+            }
+        }
+    }
+    return locked;
 }
 
 export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
@@ -387,7 +409,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
     }
 
-    equipBlueprint(blueprintString) {
+    async equipBlueprint(blueprintString) {
         if (!this.isBlueprintsUnlocked()) {
             this.showBlueprintsNotUnlocked();
             return;
@@ -399,11 +421,44 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             const entities = bpMod.constructor.deserialize(this.root, blueprintString);
             
             if (entities) {
+                const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
+                if (lockedEntities && lockedEntities.length > 0) {
+                    const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
+                    const warningType = (shapez && shapez.enumNotificationType && shapez.enumNotificationType.warning) || NOTIFY.warning;
+                    if (this.root.hud?.parts?.notifications?.sendNotification) {
+                        this.root.hud.parts.notifications.sendNotification(warningMsg, warningType);
+                    } else {
+                        this.notify(warningMsg, warningType);
+                    }
+                    return;
+                }
+
                 const blueprint = new shapez.Blueprint(entities);
-                this.root.hud.parts.blueprintPlacer.currentBlueprint.set(blueprint);
-                if (this.root.hud.signals && this.root.hud.signals.pasteBlueprintRequested) {
+                
+                if (this.root.hud?.parts?.blueprintPlacer) {
+                    this.root.hud.parts.blueprintPlacer.lastBlueprintUsed = blueprint;
+                    if (this.root.hud.parts.blueprintPlacer.currentBlueprint?.set) {
+                        this.root.hud.parts.blueprintPlacer.currentBlueprint.set(blueprint);
+                    }
+                }
+
+                try {
+                    if (navigator?.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(blueprintString);
+                    }
+                } catch (e) {
+                    console.warn("[BlueprintBook] Clipboard write failed:", e);
+                }
+
+                if (this.root.keymapper?.emit) {
+                    this.root.keymapper.emit("pasteBlueprintRequested");
+                } else if (this.root.keyMapper?.emit) {
+                    this.root.keyMapper.emit("pasteBlueprintRequested");
+                }
+                if (this.root.hud?.signals?.pasteBlueprintRequested) {
                     this.root.hud.signals.pasteBlueprintRequested.dispatch();
                 }
+
                 this.notify("Blueprint equipped!", NOTIFY.success);
                 this.close();
             } else {
@@ -474,7 +529,8 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         const reqDiv = document.createElement('div');
         reqDiv.className = 'requirements';
 
-        const cost = getBlueprintCost(this.root, bp.value);
+        const entities = deserializeBlueprintEntities(this.root, bp.value);
+        const cost = getBlueprintCost(this.root, entities);
         if (cost !== null && cost !== undefined) {
             const costElem = renderBlueprintCostElement(this.root, cost, 24);
             reqDiv.appendChild(costElem);
@@ -496,6 +552,13 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         trackClick(equipBtn, () => {
             this.equipBlueprint(bp.value);
         });
+
+        const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
+        if (lockedEntities && lockedEntities.length > 0) {
+            equipBtn.classList.add("disabled");
+            equipBtn.disabled = true;
+            equipBtn.title = "Contains locked buildings (unlocked at higher level)";
+        }
 
         const editBtn = document.createElement('button');
         editBtn.className = 'button styledButton bplib-btn-edit';

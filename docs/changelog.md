@@ -2,20 +2,23 @@
 
 All notable changes to the **Blueprint Book** mod will be documented in this file.
 
-## [1.0.2] - 2026-07-23
+## [1.0.2] - 2026-07-24
 
 ### Added
 
 - **HUD Placement**: Moved Blueprint Book icon to the 3rd slot in the in-game menu.
 - **Level 12 Reward Gate**: Blueprint Book functionality (opening UI, hotkeys, and equipping blueprints) is now gated behind the level 12 blueprint reward unlock, matching native game behavior.
-- **Blueprint Preview**: Blueprint Book cards now show a preview of the blueprint.
-- **Blueprint Cost**: Blueprint Book cards now show the cost of the blueprint. Should be compatible with other mods that remove said cost, but please report if the cost is still shown when it shouldn't be.
+- **Blueprint Preview**: Blueprint Book cards now show an interactive canvas preview of the blueprint with zoom, pan, and recenter capabilities.
+- **Blueprint Cost**: Blueprint Book cards and preview dialogs now display blueprint costs matching player game mode settings.
 
 ### Bugs Squashed
 
-- **Welcome Dialog**: Fixed an issue where the welcome popup would re-appear every time you loaded your save game.
-- **Library Scrolling**: Fixed scrolling issues in the blueprint book window.
-- **Blueprint Migration**: Fixed an issue where blueprints didn't persist across updated versions.
+- **Blueprint Persistence & Resurfacing**: Fixed migration version tracking so deleted migrated blueprints no longer resurface on save reload.
+- **Blueprint Equip (`V` Key)**: Fixed equipping blueprints so `V` ("Paste Last Blueprint") places the equipped blueprint accurately without clipboard desynchronization.
+- **Preview Canvas & Controls**: Fixed bounding box calculations (`b.w`/`b.h`), min-zoom limit (0.02), Recenter button placement, layout container decoupling, and belt corner rendering.
+- **Unlock Progression Gating**: Disabled EQUIP buttons on cards and preview dialogs when blueprints contain locked buildings or variants based on player level progression.
+- **Welcome Dialog**: Fixed an issue where the welcome popup would re-appear on every save load.
+- **Library Scrolling**: Fixed scrolling and mouse wheel interaction inside the blueprint book dialog.
 
 ## [1.0.1] - 2026-07-21
 

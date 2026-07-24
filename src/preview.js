@@ -1,31 +1,38 @@
-export function getBlueprintEntityCount(root, blueprintString) {
+export function resolveBpStringMod(root) {
     const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-    if (!gShapez || !root) return 0;
+    if (!gShapez || !root) return null;
     const modLoader = gShapez.BlueprintLibraryModLoader;
-    if (!modLoader || !Array.isArray(modLoader.mods)) return 0;
-    const bpMod = modLoader.mods.find(m => m.metadata?.id === "bp-string");
-    if (!bpMod) return 0;
+    if (!modLoader || !Array.isArray(modLoader.mods)) return null;
+    return modLoader.mods.find(m => m.metadata?.id === "bp-string") || null;
+}
+
+export function deserializeBlueprintEntities(root, blueprintInput) {
+    if (!blueprintInput) return null;
+    if (Array.isArray(blueprintInput)) return blueprintInput;
+    const bpMod = resolveBpStringMod(root);
+    if (!bpMod) return null;
     try {
-        const entities = bpMod.constructor.deserialize(root, blueprintString);
-        return entities ? entities.length : 0;
+        return bpMod.constructor.deserialize(root, blueprintInput) || null;
     } catch {
-        return 0;
+        return null;
     }
 }
 
-export function getBlueprintCost(root, blueprintString) {
-    const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-    if (!gShapez || !root) return null;
+export function getBlueprintEntityCount(root, blueprintInput) {
+    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    return entities ? entities.length : 0;
+}
+
+export function getBlueprintCost(root, blueprintInput) {
+    if (!root) return null;
     if (root.gameMode && typeof root.gameMode.getHasFreeCopyPaste === "function" && root.gameMode.getHasFreeCopyPaste()) {
         return 0;
     }
-    const modLoader = gShapez.BlueprintLibraryModLoader;
-    if (!modLoader || !Array.isArray(modLoader.mods)) return null;
-    const bpMod = modLoader.mods.find(m => m.metadata?.id === "bp-string");
-    if (!bpMod) return null;
+    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    if (!entities) return null;
     try {
-        const entities = bpMod.constructor.deserialize(root, blueprintString);
-        if (!entities) return null;
+        const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
+        if (!gShapez || !gShapez.Blueprint) return null;
         const bp = new gShapez.Blueprint(entities);
         return typeof bp.getCost === "function" ? bp.getCost() : null;
     } catch {
@@ -37,13 +44,15 @@ export function getBlueprintCost(root, blueprintString) {
  * Manages an interactive preview canvas supporting pan, zoom, and recenter.
  */
 export class InteractiveBlueprintViewer {
-    constructor(root, blueprintString, containerElem) {
+    constructor(root, blueprintInput, containerElem) {
         this.root = root;
-        this.blueprintString = blueprintString;
+        this.blueprintInput = blueprintInput;
         this.containerElem = containerElem;
 
         this.canvas = document.createElement("canvas");
-        this.containerElem.appendChild(this.canvas);
+        if (this.containerElem) {
+            this.containerElem.appendChild(this.canvas);
+        }
         this.ctx = this.canvas.getContext("2d");
 
         this.entities = [];
@@ -54,10 +63,6 @@ export class InteractiveBlueprintViewer {
         this.zoom = 1;
         this.baseScale = 1;
 
-        this.isDragging = false;
-        this.dragStartX = 0;
-        this.dragStartY = 0;
-
         this.initEntities();
         this.setupEvents();
         this.resize();
@@ -65,26 +70,22 @@ export class InteractiveBlueprintViewer {
     }
 
     initEntities() {
-        const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-        if (!gShapez || !this.root) return;
-
-        const modLoader = gShapez.BlueprintLibraryModLoader;
-        if (!modLoader || !Array.isArray(modLoader.mods)) return;
-        const bpMod = modLoader.mods.find(m => m.metadata?.id === "bp-string");
-        if (!bpMod) return;
+        if (!this.root) return;
 
         try {
-            this.entities = bpMod.constructor.deserialize(this.root, this.blueprintString) || [];
+            this.entities = deserializeBlueprintEntities(this.root, this.blueprintInput) || [];
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             for (let i = 0; i < this.entities.length; ++i) {
-                const staticComp = this.entities[i].components?.StaticMapEntity;
+                const staticComp = this.entities[i]?.components?.StaticMapEntity;
                 if (!staticComp) continue;
                 const b = staticComp.getTileSpaceBounds();
-                if (!b) continue;
+                if (!b || !Number.isFinite(b.x) || !Number.isFinite(b.y)) continue;
+                const bw = typeof b.w === "number" ? b.w : (typeof b.width === "number" ? b.width : 1);
+                const bh = typeof b.h === "number" ? b.h : (typeof b.height === "number" ? b.height : 1);
                 minX = Math.min(minX, b.x);
                 minY = Math.min(minY, b.y);
-                maxX = Math.max(maxX, b.x + b.width);
-                maxY = Math.max(maxY, b.y + b.height);
+                maxX = Math.max(maxX, b.x + bw);
+                maxY = Math.max(maxY, b.y + bh);
             }
             if (minX !== Infinity) {
                 this.bounds = {
@@ -99,9 +100,16 @@ export class InteractiveBlueprintViewer {
     }
 
     resize() {
-        const rect = this.containerElem.getBoundingClientRect();
-        this.canvas.width = Math.max(300, rect.width || 580);
-        this.canvas.height = Math.max(200, rect.height || 380);
+        const rect = this.containerElem ? this.containerElem.getBoundingClientRect() : { width: 0, height: 0 };
+        const clientW = this.containerElem ? (this.containerElem.clientWidth || rect.width) : rect.width;
+        const clientH = this.containerElem ? (this.containerElem.clientHeight || rect.height) : rect.height;
+        const newW = Math.max(300, Math.floor(clientW || 580));
+        const newH = Math.max(200, Math.floor(clientH || 380));
+
+        if (this.canvas.width !== newW || this.canvas.height !== newH) {
+            this.canvas.width = newW;
+            this.canvas.height = newH;
+        }
 
         const tileSizePx = 32;
         const availableW = Math.max(1, this.canvas.width - 40);
@@ -115,6 +123,7 @@ export class InteractiveBlueprintViewer {
     }
 
     recenter() {
+        this.resize();
         this.zoom = 1;
         const tileSizePx = 32;
         const totalW = this.bounds.tilesW * tileSizePx * this.baseScale;
@@ -164,11 +173,13 @@ export class InteractiveBlueprintViewer {
             e.stopPropagation();
 
             const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-            const newZoom = Math.min(5, Math.max(0.2, this.zoom * zoomFactor));
+            const newZoom = Math.min(10, Math.max(0.02, this.zoom * zoomFactor));
 
             const rect = this.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+            const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1;
+            const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1;
+            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseY = (e.clientY - rect.top) * scaleY;
 
             this.panX = mouseX - (mouseX - this.panX) * (newZoom / this.zoom);
             this.panY = mouseY - (mouseY - this.panY) * (newZoom / this.zoom);
@@ -181,19 +192,50 @@ export class InteractiveBlueprintViewer {
         window.addEventListener("pointermove", this.onPointerMove);
         window.addEventListener("pointerup", this.onPointerUp);
         this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+
+        if (typeof window !== "undefined" && window.ResizeObserver && this.containerElem) {
+            let lastW = 0;
+            let lastH = 0;
+            this.resizeObserver = new ResizeObserver((entries) => {
+                const entryList = Array.isArray(entries) ? entries : (entries ? [entries] : []);
+                if (entryList.length === 0) {
+                    this.resize();
+                    return;
+                }
+                for (const entry of entryList) {
+                    const w = Math.floor(entry?.contentRect?.width || 0);
+                    const h = Math.floor(entry?.contentRect?.height || 0);
+                    if (w > 0 && h > 0 && (Math.abs(w - lastW) > 5 || Math.abs(h - lastH) > 5)) {
+                        lastW = w;
+                        lastH = h;
+                        this.resize();
+                    }
+                }
+            });
+            this.resizeObserver.observe(this.containerElem);
+        }
     }
 
     cleanup() {
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
         this.canvas.removeEventListener("pointerdown", this.onPointerDown);
-        window.removeEventListener("pointermove", this.onPointerMove);
-        window.removeEventListener("pointerup", this.onPointerUp);
+        if (typeof window !== "undefined") {
+            window.removeEventListener("pointermove", this.onPointerMove);
+            window.removeEventListener("pointerup", this.onPointerUp);
+        }
         this.canvas.removeEventListener("wheel", this.onWheel);
+        if (this.canvas && this.canvas.parentNode) {
+            this.canvas.parentNode.removeChild(this.canvas);
+        }
     }
 
     render() {
         if (!this.ctx) return;
         const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-        if (!gShapez) return;
+        if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector) return;
 
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -220,13 +262,15 @@ export class InteractiveBlueprintViewer {
 
         const minVector = new gShapez.Vector(this.bounds.minX, this.bounds.minY);
         for (let i = 0; i < this.entities.length; ++i) {
-            const staticComp = this.entities[i].components?.StaticMapEntity;
+            const staticComp = this.entities[i]?.components?.StaticMapEntity;
             if (!staticComp) continue;
+            if (!staticComp.origin || typeof staticComp.origin.sub !== "function") continue;
 
             const relativeOrigin = staticComp.origin.sub(minVector);
             const meta = typeof staticComp.getMetaBuilding === "function" ? staticComp.getMetaBuilding() : null;
+            const rotationVariant = typeof staticComp.getRotationVariant === "function" ? staticComp.getRotationVariant() : 0;
             const sprite = (typeof staticComp.getSprite === "function" && staticComp.getSprite()) ||
-                (meta && typeof meta.getPreviewSprite === "function" && meta.getPreviewSprite(staticComp.rotationVariant || 0, staticComp.getVariant ? staticComp.getVariant() : undefined)) ||
+                (meta && typeof meta.getPreviewSprite === "function" && meta.getPreviewSprite(rotationVariant, staticComp.getVariant ? staticComp.getVariant() : undefined)) ||
                 (typeof staticComp.getBlueprintSprite === "function" && staticComp.getBlueprintSprite());
 
             if (sprite && typeof staticComp.drawSpriteOnBoundsClipped === "function") {
@@ -292,10 +336,11 @@ export function renderBlueprintCostElement(root, cost, iconSize = 30) {
  */
 export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
     const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-    if (!gShapez || !root) return;
+    if (!gShapez || !root || !blueprint) return;
 
-    const entityCount = getBlueprintEntityCount(root, blueprint.value);
-    const cost = getBlueprintCost(root, blueprint.value);
+    const entities = deserializeBlueprintEntities(root, blueprint.value || blueprint);
+    const entityCount = getBlueprintEntityCount(root, entities);
+    const cost = getBlueprintCost(root, entities);
 
     const previewHtml = `
         <div class="bplib-preview-dialog-content">
@@ -315,17 +360,19 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         gShapez.T.dialogs.buttons.equip = "EQUIP";
     }
 
+    let viewer = null;
+
     const dialog = new gShapez.Dialog({
         app: root.app,
         title: blueprint.name || "Blueprint Preview",
         contentHTML: previewHtml,
-        buttons: ["cancel:bad", "equip:good:EQUIP"]
+        buttons: ["cancel:bad", "equip:good"]
     });
 
     if (dialog.buttonSignals && dialog.buttonSignals.equip) {
         dialog.buttonSignals.equip.add(() => {
-            if (root.hud && root.hud.parts && root.hud.parts.dialogs) {
-                root.hud.parts.dialogs.closeDialog(dialog);
+            if (viewer) {
+                try { viewer.cleanup(); } catch (e) {}
             }
             if (typeof onEquip === "function") onEquip();
         });
@@ -349,25 +396,50 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         });
     }
 
-    // Render upgrade-style cost element into slot after internalShowDialog
+    // Move stats into bottom button row on the left side
     if (dialog.element) {
+        const buttonsDiv = dialog.element.querySelector(".buttons");
+        const statsElem = dialog.element.querySelector(".bplib-preview-stats");
+        if (buttonsDiv && statsElem && statsElem.parentNode !== buttonsDiv) {
+            buttonsDiv.insertBefore(statsElem, buttonsDiv.firstChild);
+        }
+
         const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
         if (costSlot && cost !== null && cost !== undefined) {
             const labelSpan = document.createElement("span");
-            labelSpan.className = "label";
+            labelSpan.className = "label bplib-preview-cost-label";
             labelSpan.textContent = "Cost:";
-            labelSpan.style.marginRight = "6px";
             costSlot.appendChild(labelSpan);
 
-            const costElem = renderBlueprintCostElement(root, cost, 28);
+            const costElem = renderBlueprintCostElement(root, cost, 24);
             costSlot.appendChild(costElem);
+        }
+
+        const lockedEntities = getLockedEntitiesInBlueprint(root, entities || blueprint);
+        if (lockedEntities.length > 0) {
+            const statsContainer = dialog.element.querySelector(".bplib-preview-stats");
+            if (statsContainer) {
+                const warningElem = document.createElement("span");
+                warningElem.className = "bplib-preview-locked-warning";
+                warningElem.textContent = "⚠️ Contains locked buildings";
+                statsContainer.appendChild(warningElem);
+            }
+
+            const equipBtn = Array.from(dialog.element.querySelectorAll(".buttons button, .button.good, button")).find(btn =>
+                btn.classList.contains("good") || btn.dataset.button === "equip" || btn.textContent.trim() === "EQUIP"
+            );
+            if (equipBtn) {
+                equipBtn.disabled = true;
+                equipBtn.classList.add("disabled");
+                equipBtn.title = "Contains locked buildings (unlocked at higher level)";
+            }
         }
     }
 
     // After internalShowDialog, dialog.element is the live DOM. Attach viewer to it.
     const liveContainer = dialog.element.querySelector(".bplib-preview-canvas-container");
     if (liveContainer) {
-        const viewer = new InteractiveBlueprintViewer(root, blueprint.value, liveContainer);
+        viewer = new InteractiveBlueprintViewer(root, entities || blueprint.value, liveContainer);
 
         // Defer resize & recenter to next frame when container bounding box is rendered
         if (typeof window !== "undefined" && window.requestAnimationFrame) {
@@ -379,7 +451,11 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
 
         const recenterBtn = dialog.element.querySelector(".bplib-preview-recenter-btn");
         if (recenterBtn) {
-            recenterBtn.addEventListener("click", () => viewer.recenter());
+            if (typeof dialog.trackClicks === "function") {
+                dialog.trackClicks(recenterBtn, () => viewer.recenter());
+            } else {
+                recenterBtn.addEventListener("click", () => viewer.recenter());
+            }
         }
 
         // Clean up viewer when dialog closes
@@ -388,3 +464,49 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         });
     }
 }
+
+/**
+ * Inspects blueprint entities and returns an array of locked building entities.
+ * @param {object} root 
+ * @param {any} blueprintInput 
+ * @returns {Array}
+ */
+export function getLockedEntitiesInBlueprint(root, blueprintInput) {
+    const input = (blueprintInput && typeof blueprintInput === "object" && !Array.isArray(blueprintInput) && blueprintInput.value)
+        ? blueprintInput.value
+        : blueprintInput;
+    const entities = deserializeBlueprintEntities(root, input);
+    if (!entities || !Array.isArray(entities)) return [];
+
+    const locked = [];
+    for (let i = 0; i < entities.length; ++i) {
+        const entity = entities[i];
+        const staticComp = entity?.components?.StaticMapEntity;
+        if (!staticComp) continue;
+
+        const metaBuilding = typeof staticComp.getMetaBuilding === "function"
+            ? staticComp.getMetaBuilding()
+            : null;
+        if (!metaBuilding) continue;
+
+        const isUnlocked = typeof metaBuilding.getIsUnlocked === "function"
+            ? metaBuilding.getIsUnlocked(root)
+            : true;
+
+        const variant = typeof staticComp.getVariant === "function"
+            ? staticComp.getVariant()
+            : (staticComp.variant || "default");
+
+        const availableVariants = typeof metaBuilding.getAvailableVariants === "function"
+            ? metaBuilding.getAvailableVariants(root)
+            : [variant];
+
+        const isVariantUnlocked = Array.isArray(availableVariants) && availableVariants.includes(variant);
+
+        if (!isUnlocked || !isVariantUnlocked) {
+            locked.push(entity);
+        }
+    }
+    return locked;
+}
+

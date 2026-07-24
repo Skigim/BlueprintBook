@@ -196,4 +196,84 @@ export const CSS = `
     #ingame_HUD_PinnedShapes {
         top: calc(210px * var(--ui-scale)) !important;
     }
+
+    /* --- PREVIEW DIALOG STYLES --- */
+    .dialogUpgrades .dialogInner .buttons {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+    }
+    .bplib-preview-dialog-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .bplib-preview-canvas-container {
+        position: relative;
+        min-height: 360px;
+        flex: 1;
+        overflow: hidden;
+    }
+    .bplib-preview-canvas-container canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+    }
+    .bplib-preview-stats {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: "GameFont", sans-serif;
+        font-size: 13px;
+        color: #fff;
+    }
+    .bplib-preview-cost-slot {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .bplib-preview-cost-slot .requirements {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+    }
+    .bplib-preview-cost-slot .requirement {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .bplib-preview-cost-slot .shape {
+        width: 24px;
+        height: 24px;
+    }
+    .bplib-preview-cost-slot .amount {
+        padding: 1px 8px;
+        font-size: 12px;
+    }
+    .bplib-preview-locked-warning {
+        color: #ff9800;
+        font-family: "GameFont", sans-serif;
+        font-size: 13px;
+    }
+    .bplib-preview-recenter-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        pointer-events: auto;
+    }
+    .button.styledButton.disabled,
+    button.styledButton:disabled,
+    button.styledButton.disabled {
+        opacity: 0.4 !important;
+        cursor: not-allowed !important;
+    }
 `;
+
+

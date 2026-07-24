@@ -397,7 +397,7 @@ describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
         hudLibrary.registerClickDetector = vi.fn();
     });
 
-    it('resets visible to false and cleans up dialog when equipBlueprint is called', () => {
+    it('resets visible to false and cleans up dialog when equipBlueprint is called', async () => {
         let mockDialogInstance;
         global.shapez.Dialog = class {
             constructor(opts) {
@@ -422,7 +422,7 @@ describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
         hudLibrary.show();
         expect(hudLibrary.visible).toBe(true);
 
-        hudLibrary.equipBlueprint('VALID_BP_STRING');
+        await hudLibrary.equipBlueprint('VALID_BP_STRING');
 
         expect(mockRoot.hud.parts.dialogs.closeDialog).toHaveBeenCalledWith(mockDialogInstance);
         expect(hudLibrary.visible).toBe(false);
@@ -558,13 +558,186 @@ describe('Reward-Based Blueprint Unlock Gating', () => {
         expect(showInfoSpy).toHaveBeenCalled();
     });
 
-    it('blocks equipBlueprint() before level 12 and displays blueprintsNotUnlocked dialog', () => {
+    it('blocks equipBlueprint() before level 12 and displays blueprintsNotUnlocked dialog', async () => {
         mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(false);
 
-        hudLibrary.equipBlueprint('VALID_BP_STRING');
+        await hudLibrary.equipBlueprint('VALID_BP_STRING');
 
         expect(showInfoSpy).toHaveBeenCalled();
     });
 });
+
+describe('async equipBlueprint', () => {
+    let mockRoot;
+    let hudLibrary;
+    let originalClipboard;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        originalClipboard = global.navigator.clipboard;
+
+        mockRoot = {
+            app: {},
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true),
+                isBuildingUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    },
+                    blueprintPlacer: {
+                        currentBlueprint: { set: vi.fn() },
+                        lastBlueprintUsed: null
+                    },
+                    notifications: {
+                        sendNotification: vi.fn()
+                    }
+                },
+                signals: {
+                    notification: { dispatch: vi.fn() },
+                    pasteBlueprintRequested: { dispatch: vi.fn() }
+                }
+            },
+            keymapper: {
+                emit: vi.fn()
+            }
+        };
+
+        global.shapez.Blueprint = class {
+            constructor(entities) {
+                this.entities = entities;
+            }
+        };
+
+        global.shapez.BlueprintLibraryModLoader = {
+            mods: [{
+                metadata: { id: 'bp-string' },
+                constructor: {
+                    deserialize: vi.fn().mockReturnValue([{ uid: 1, components: {} }])
+                }
+            }]
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.close = vi.fn(hudLibrary.close.bind(hudLibrary));
+    });
+
+    afterEach(() => {
+        if (originalClipboard !== undefined) {
+            Object.defineProperty(global.navigator, 'clipboard', {
+                value: originalClipboard,
+                configurable: true,
+                writable: true
+            });
+        } else {
+            delete global.navigator.clipboard;
+        }
+    });
+
+    it('sets lastBlueprintUsed synchronously before clipboard write completes', async () => {
+        let resolveClipboard;
+        const clipboardPromise = new Promise(resolve => { resolveClipboard = resolve; });
+        const writeTextMock = vi.fn().mockReturnValue(clipboardPromise);
+
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: { writeText: writeTextMock },
+            configurable: true,
+            writable: true
+        });
+
+        const equipPromise = hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        // Verify lastBlueprintUsed was set synchronously before clipboard Promise resolves
+        expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed).toBeDefined();
+        expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed.entities).toEqual([{ uid: 1, components: {} }]);
+
+        resolveClipboard();
+        await equipPromise;
+    });
+
+    it('attempts clipboard writeText with blueprintString and handles failures gracefully', async () => {
+        const writeTextMock = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: { writeText: writeTextMock },
+            configurable: true,
+            writable: true
+        });
+
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+        expect(writeTextMock).toHaveBeenCalledWith('TEST_BP_STRING');
+
+        // Test rejection handled gracefully without throwing
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        writeTextMock.mockRejectedValueOnce(new Error('Clipboard denied'));
+        await expect(hudLibrary.equipBlueprint('TEST_BP_STRING')).resolves.not.toThrow();
+        expect(consoleWarnSpy).toHaveBeenCalledWith('[BlueprintBook] Clipboard write failed:', expect.any(Error));
+        consoleWarnSpy.mockRestore();
+    });
+
+    it('dispatches warning notification and returns early without setting blueprint, clipboard, or paste event if locked entities exist', async () => {
+        const writeTextMock = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: { writeText: writeTextMock },
+            configurable: true,
+            writable: true
+        });
+
+        const lockedEntity = {
+            components: {
+                StaticMapEntity: {
+                    getMetaBuilding: () => ({ id: 'locked_building' })
+                }
+            }
+        };
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
+        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+
+        await hudLibrary.equipBlueprint('LOCKED_BP_STRING');
+
+        expect(mockRoot.hud.parts.notifications.sendNotification).toHaveBeenCalledWith(
+            'Blueprint contains locked buildings (unlocked at later levels)',
+            expect.anything()
+        );
+        expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed).toBeNull();
+        expect(mockRoot.hud.parts.blueprintPlacer.currentBlueprint.set).not.toHaveBeenCalled();
+        expect(writeTextMock).not.toHaveBeenCalled();
+        expect(mockRoot.keymapper.emit).not.toHaveBeenCalled();
+        expect(mockRoot.hud.signals.pasteBlueprintRequested.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('_createBlueprintCard disables equip button and sets title tooltip when blueprint contains locked entities', () => {
+        const lockedEntity = {
+            components: {
+                StaticMapEntity: {
+                    getMetaBuilding: () => ({ id: 'locked_building' })
+                }
+            }
+        };
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
+        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+
+        const bp = { id: 'bp_locked', name: 'Locked BP', value: 'LOCKED_BP_STRING', tags: [] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+
+        const equipBtn = card.querySelector('.bplib-btn-equip');
+        expect(equipBtn).not.toBeNull();
+        expect(equipBtn.classList.contains('disabled')).toBe(true);
+        expect(equipBtn.disabled).toBe(true);
+        expect(equipBtn.title).toBe('Contains locked buildings (unlocked at higher level)');
+    });
+
+    it('emits paste event and calls close()', async () => {
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        expect(mockRoot.keymapper.emit).toHaveBeenCalledWith('pasteBlueprintRequested');
+        expect(hudLibrary.close).toHaveBeenCalled();
+    });
+});
+
 
 

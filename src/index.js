@@ -6,8 +6,6 @@ import { extendHUDGameMenu, extendHUDKeybindingOverlay } from "../lib/ui.js";
 
 class BlueprintLibraryMod extends shapez.Mod {
     async init() {
-        console.log("[BlueprintBook] BlueprintLibraryMod.init() called.");
-
         // Expose the modLoader so the HUD component can access BPStrings for blueprint parsing
         shapez.BlueprintLibraryModLoader = this.modLoader;
 
@@ -15,7 +13,6 @@ class BlueprintLibraryMod extends shapez.Mod {
         let listKeysAsync = null;
         try {
             const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
-            console.log("[BlueprintBook] Setting up storage reader. G_IS_STANDALONE =", isStandalone);
 
             let idbStorage = null;
             let electronStorage = null;
@@ -54,7 +51,7 @@ class BlueprintLibraryMod extends shapez.Mod {
                         if (res) return res;
                     } catch (e) {}
                 }
-                throw "file_not_found";
+                throw new Error("file_not_found");
             };
 
             listKeysAsync = async () => {
@@ -72,15 +69,11 @@ class BlueprintLibraryMod extends shapez.Mod {
                 }
                 return keys;
             };
-
-            console.log("[BlueprintBook] Storage readers created successfully.");
         } catch (e) {
             console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
         }
 
-        console.log("[BlueprintBook] Initializing BlueprintStore...");
         await BlueprintStore.init(this, readFileAsync, listKeysAsync);
-        console.log("[BlueprintBook] BlueprintStore initialized.");
 
         this.modInterface.registerCss(CSS);
         this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);

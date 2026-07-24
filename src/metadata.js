@@ -14,5 +14,7 @@ export const METADATA = {
         availableTags: [],
         lastSeenVersion: "",
         skippedVersion: "",
+        deletedValues: [],
+        deletedNames: [],
     },
 };
