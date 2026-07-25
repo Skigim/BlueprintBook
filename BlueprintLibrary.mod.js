@@ -4,7 +4,7 @@
     id: "bp-library",
     name: "Blueprint Library",
     author: "Skigim",
-    version: "1.0.2",
+    version: "1.0.3",
     website: "",
     description: "A full rewrite of KiitikM's Blueprint Library mod. Features include: perfectly integrated native-style UI, custom tagging and filtering system, unified edit dialogs, and memory leak fixes.",
     minimumGameVersion: ">=1.5.0",
@@ -709,19 +709,18 @@
         $old.createElements.call(this, parent);
         const mapper = this.root.keyMapper;
         const k = shapez.KEYMAPPINGS;
-        const isUnlocked = () => !this.root.hubGoals || typeof this.root.hubGoals.isRewardUnlocked === "function" && this.root.hubGoals.isRewardUnlocked(shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints");
         const customBindings = [
           {
             // [SELECTION ACTIVE] Save selected area to Blueprint Book
             label: "Save to Book",
             keys: [k?.massSelect?.massSelectStart || 17, "+", 80],
-            condition: () => this.anythingSelectedOnMap && isUnlocked()
+            condition: () => this.anythingSelectedOnMap && isBlueprintsUnlocked(this.root)
           },
           {
             // Open / Toggle Blueprint Book when not placing a blueprint
             label: "Blueprint Book",
             keys: [80],
-            condition: () => !this.blueprintPlacementActive && isUnlocked()
+            condition: () => !this.blueprintPlacementActive && isBlueprintsUnlocked(this.root)
           }
         ];
         for (let i = 0; i < customBindings.length; ++i) {
@@ -1042,7 +1041,7 @@
     render() {
       if (!this.ctx) return;
       const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
-      if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector) return;
+      if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector || !gShapez.Rectangle) return;
       const w = this.canvas.width;
       const h = this.canvas.height;
       const mapBgColor = gShapez.THEMES && gShapez.THEMES.dark && gShapez.THEMES.dark.map && gShapez.THEMES.dark.map.background || "#1c2333";
@@ -1136,6 +1135,8 @@
     });
     if (dialog.buttonSignals && dialog.buttonSignals.equip) {
       dialog.buttonSignals.equip.add(() => {
+        const locked = getLockedEntitiesInBlueprint(root, entities || blueprint);
+        if (locked && locked.length > 0) return;
         if (viewer) {
           try {
             viewer.cleanup();
@@ -1288,10 +1289,14 @@
     if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
       const id = `Blueprint Book v${METADATA.version}`;
       if (!shapez.CHANGELOG.some((item) => item.version === id)) {
+        const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
+        const matchingEntry = Array.isArray(MOD_CHANGELOG) ? MOD_CHANGELOG.find((item) => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer) : null;
+        const entries = getReleaseNotesForVersion(METADATA.version);
+        const date = matchingEntry && matchingEntry.date || "2026-07-24";
         shapez.CHANGELOG.unshift({
           version: id,
-          date: MOD_CHANGELOG[0] && MOD_CHANGELOG[0].date || "2026-07-24",
-          entries: MOD_CHANGELOG[0].entries
+          date,
+          entries
         });
       }
     }
@@ -1316,6 +1321,13 @@
       }
     }
     return locked;
+  }
+  function isBlueprintsUnlocked(root) {
+    if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
+      const reward = shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints";
+      return root.hubGoals.isRewardUnlocked(reward);
+    }
+    return true;
   }
   var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
     createElements(parent) {
@@ -1512,11 +1524,7 @@
       }
     }
     isBlueprintsUnlocked() {
-      if (this.root && this.root.hubGoals && typeof this.root.hubGoals.isRewardUnlocked === "function") {
-        const reward = shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints";
-        return this.root.hubGoals.isRewardUnlocked(reward);
-      }
-      return true;
+      return isBlueprintsUnlocked(this.root);
     }
     showBlueprintsNotUnlocked() {
       if (this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
@@ -1614,8 +1622,16 @@
         return;
       }
       try {
-        const modLoader = shapez.BlueprintLibraryModLoader;
-        const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");
+        const modLoader = shapez?.BlueprintLibraryModLoader;
+        if (!modLoader || !Array.isArray(modLoader.mods)) {
+          this.notify("Blueprint strings mod loader unavailable.", NOTIFY.error);
+          return;
+        }
+        const bpMod = modLoader.mods.find((m) => m?.metadata?.id === "bp-string");
+        if (!bpMod || !bpMod.constructor || typeof bpMod.constructor.deserialize !== "function") {
+          this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
+          return;
+        }
         const entities = bpMod.constructor.deserialize(this.root, blueprintString);
         if (entities) {
           const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
@@ -1715,8 +1731,19 @@
       descDiv.appendChild(delBtn);
       const reqDiv = document.createElement("div");
       reqDiv.className = "requirements";
-      const entities = deserializeBlueprintEntities(this.root, bp.value);
-      const cost = getBlueprintCost(this.root, entities);
+      if (!this._cardCache) {
+        this._cardCache = /* @__PURE__ */ new Map();
+      }
+      const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
+      let cached = this._cardCache.get(cacheKey);
+      if (!cached) {
+        const entities2 = deserializeBlueprintEntities(this.root, bp?.value);
+        const cost2 = getBlueprintCost(this.root, entities2);
+        const lockedEntities2 = getLockedEntitiesInBlueprint2(this.root, entities2);
+        cached = { entities: entities2, cost: cost2, lockedEntities: lockedEntities2 };
+        this._cardCache.set(cacheKey, cached);
+      }
+      const { entities, cost, lockedEntities } = cached;
       if (cost !== null && cost !== void 0) {
         const costElem = renderBlueprintCostElement(this.root, cost, 24);
         reqDiv.appendChild(costElem);
@@ -1733,9 +1760,9 @@
       equipBtn.className = "button styledButton good bplib-btn-equip";
       equipBtn.textContent = "EQUIP";
       trackClick(equipBtn, () => {
+        if (lockedEntities && lockedEntities.length > 0) return;
         this.equipBlueprint(bp.value);
       });
-      const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
       if (lockedEntities && lockedEntities.length > 0) {
         equipBtn.classList.add("disabled");
         equipBtn.disabled = true;
