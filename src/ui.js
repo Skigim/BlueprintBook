@@ -67,6 +67,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     bindEvents() {
+        if (!this.overlay) return;
         const searchInput = this.overlay.querySelector('#bplib-search');
         if (searchInput) {
             searchInput.onpointerdown = () => searchInput.focus();
@@ -166,12 +167,16 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         if (!this.dynamicClickDetectors) this.dynamicClickDetectors = [];
         const detector = new shapez.ClickDetector(element, {});
         detector.click.add(handler, this);
-        this.registerClickDetector(detector);
+        if (typeof this.registerClickDetector === "function") {
+            this.registerClickDetector(detector);
+        }
         this.dynamicClickDetectors.push(detector);
     }
 
     initialize() {
         this.visible = false;
+        this.updateDialog = null;
+        this.latestUpdateInfo = null;
         registerNativeChangelogEntry();
         this.checkUpdateOnce();
     }
@@ -187,10 +192,13 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         try {
             const update = await checkForUpdates(currentVersion);
 
-            if (update.updateAvailable && update.latestVersion !== skippedVersion) {
-                // Scenario A: A newer version is published on GitHub / Mod.io
-                this.showUpdateDialog(update);
-                BlueprintStore.setLastSeenVersion(currentVersion);
+            if (update && update.updateAvailable) {
+                this.latestUpdateInfo = update;
+                if (update.latestVersion !== skippedVersion) {
+                    // Scenario A: A newer version is published on GitHub / Mod.io
+                    this.showUpdateDialog(update);
+                    BlueprintStore.setLastSeenVersion(currentVersion);
+                }
             } else if (lastSeenVersion !== currentVersion) {
                 // Scenario B: First time running this installed version (e.g. v1.0.1 welcome dialog)
                 this.showWelcomeDialog(currentVersion);
@@ -235,7 +243,41 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
     }
 
+    async toggleUpdateDialog() {
+        if (this.updateDialog) {
+            if (this.root?.hud?.parts?.dialogs) {
+                this.root.hud.parts.dialogs.closeDialog(this.updateDialog);
+            }
+            this.updateDialog = null;
+            return;
+        }
+
+        if (this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable) {
+            this.showUpdateDialog(this.latestUpdateInfo);
+            return;
+        }
+
+        const update = await checkForUpdates(METADATA.version);
+        if (update && update.updateAvailable) {
+            this.latestUpdateInfo = update;
+            this.showUpdateDialog(update);
+        } else {
+            this.notify(`Blueprint Book v${METADATA.version} is up to date!`, NOTIFY.info);
+        }
+    }
+
     showUpdateDialog({ latestVersion, downloadUrl, releaseNotes }) {
+        this.latestUpdateInfo = { latestVersion, downloadUrl, releaseNotes, updateAvailable: true };
+
+        if (this.updateDialog) {
+            try {
+                if (this.root?.hud?.parts?.dialogs) {
+                    this.root.hud.parts.dialogs.closeDialog(this.updateDialog);
+                }
+            } catch (e) {}
+            this.updateDialog = null;
+        }
+
         if (shapez?.T?.dialogs?.buttons) {
             shapez.T.dialogs.buttons.viewOnModIo = "VIEW ON MOD.IO";
             shapez.T.dialogs.buttons.skipVersion = "SKIP VERSION";
@@ -271,6 +313,16 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             closeButton: false
         });
 
+        this.updateDialog = dialog;
+
+        if (dialog.closeRequested) {
+            dialog.closeRequested.add(() => {
+                if (this.updateDialog === dialog) {
+                    this.updateDialog = null;
+                }
+            });
+        }
+
         this.root.hud.parts.dialogs.internalShowDialog(dialog);
         if (dialog.dialogElem) {
             dialog.dialogElem.classList.add("dialogMods", "updateAvailableDialog");
@@ -282,6 +334,17 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                     BlueprintStore.setSkippedVersion(latestVersion);
                 } catch (e) {
                     console.error("[BlueprintBook] Failed to save skipped version:", e);
+                }
+                if (this.updateDialog === dialog) {
+                    this.updateDialog = null;
+                }
+            });
+        }
+
+        if (dialog.buttonSignals.cancel) {
+            dialog.buttonSignals.cancel.add(() => {
+                if (this.updateDialog === dialog) {
+                    this.updateDialog = null;
                 }
             });
         }
@@ -296,6 +359,9 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                     shapez.openStandaloneLink(targetUrl);
                 } else {
                     window.open(targetUrl, "_blank");
+                }
+                if (this.updateDialog === dialog) {
+                    this.updateDialog = null;
                 }
             });
         }
@@ -365,6 +431,11 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                 return;
             }
 
+            const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
+            const updateBtnHtml = showUpdateBtn
+                ? `<button class="button styledButton bplib-btn-update" id="bplib-btn-update" style="background: #e65100; color: #fff;">Update (v${this.latestUpdateInfo.latestVersion})</button>`
+                : "";
+
             this.dialog = new shapez.Dialog({
                 app: this.root.app,
                 title: "Blueprint Book",
@@ -372,6 +443,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                     <div class="bplib-dialog-content">
                         <div class="bplib-toolbar">
                             <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
+                            ${updateBtnHtml}
                             <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
                         </div>
                         <div id="bplib-filter-tags" class="bplib-filterHeader"></div>
@@ -493,6 +565,13 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         try {
             this.cleanupDynamicClickDetectors();
             
+            const updateBtn = this.overlay.querySelector('#bplib-btn-update');
+            if (updateBtn) {
+                this.trackDynamicClick(updateBtn, () => {
+                    this.toggleUpdateDialog();
+                });
+            }
+
             const tagsContainer = this.overlay.querySelector('#bplib-filter-tags');
             if (tagsContainer) {
                 tagsContainer.innerHTML = '';

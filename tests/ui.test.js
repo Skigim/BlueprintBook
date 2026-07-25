@@ -16,6 +16,13 @@ global.shapez = {
             Object.assign(this, opts);
         }
     },
+    ClickDetector: class {
+        constructor(element, opts) {
+            this.element = element;
+            this.click = { add: (handler, receiver) => { element.addEventListener('click', (e) => handler.call(receiver, e)); } };
+        }
+        cleanup() {}
+    },
     BlueprintLibraryModLoader: {
         mods: []
     }
@@ -256,8 +263,89 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         await hudLibrary2.checkUpdateOnce();
 
-        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion ('1.0.2')
+        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion
         expect(hudLibrary2.showWelcomeDialog).not.toHaveBeenCalled();
+    });
+
+    it('toggles update dialog open and closed on demand with toggleUpdateDialog()', async () => {
+        const mockDialog = {
+            dialogElem: document.createElement('div'),
+            buttonSignals: {},
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    }
+                }
+            }
+        };
+
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.latestUpdateInfo = { latestVersion: '2.0.0', downloadUrl: 'https://example.com', releaseNotes: 'Major update', updateAvailable: true };
+
+        // 1. First call opens the dialog
+        global.shapez.Dialog = vi.fn().mockImplementation(function() { return mockDialog; });
+        await hudLibrary.toggleUpdateDialog();
+
+        expect(mockRoot.hud.parts.dialogs.internalShowDialog).toHaveBeenCalledWith(mockDialog);
+        expect(hudLibrary.updateDialog).toBe(mockDialog);
+
+        // 2. Second call closes the dialog
+        await hudLibrary.toggleUpdateDialog();
+        expect(mockRoot.hud.parts.dialogs.closeDialog).toHaveBeenCalledWith(mockDialog);
+        expect(hudLibrary.updateDialog).toBeNull();
+    });
+
+    it('renders update button in toolbar when update is available and toggles dialog on click', async () => {
+        const mockOverlay = document.createElement('div');
+        mockOverlay.innerHTML = `
+            <div class="bplib-dialog-content">
+                <div class="bplib-toolbar">
+                    <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
+                    <button class="button styledButton bplib-btn-update" id="bplib-btn-update">Update (v2.0.0)</button>
+                    <input type="text" class="input-text" id="bplib-search">
+                </div>
+                <div id="bplib-filter-tags"></div>
+                <div id="bplib-grid" class="bplib-grid"></div>
+            </div>
+        `;
+        const mockDialog = {
+            dialogElem: document.createElement('div'),
+            element: mockOverlay,
+            buttonSignals: {},
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    }
+                }
+            }
+        };
+
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.latestUpdateInfo = { latestVersion: '2.0.0', downloadUrl: 'https://example.com', releaseNotes: 'Major update', updateAvailable: true };
+        hudLibrary.toggleUpdateDialog = vi.fn();
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function() { return mockDialog; });
+        hudLibrary.show();
+
+        const updateBtn = hudLibrary.overlay.querySelector('#bplib-btn-update');
+        expect(updateBtn).not.toBeNull();
+        expect(updateBtn.textContent).toContain('Update (v2.0.0)');
+
+        updateBtn.click();
+        expect(hudLibrary.toggleUpdateDialog).toHaveBeenCalled();
     });
 });
 
