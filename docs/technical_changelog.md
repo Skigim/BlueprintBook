@@ -15,7 +15,7 @@ This document provides deep technical details, architectural decisions, and API 
 - **Tile Bounds Calculation**: Fixed `staticComp.getTileSpaceBounds()` parsing. Corrected property access from `b.width`/`b.height` (which evaluated to `undefined` and caused `NaN` transform bounds) to native Shapez `Rectangle` properties `b.w` and `b.h`.
 - **Canvas Flex Layout Decoupling**: Solved scrollbar/layout reflow feedback loop by applying absolute positioning to `.bplib-preview-canvas-container canvas` (`position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important`) with `overflow: hidden` on parent containers.
 - **Dynamic Container Bounds**: `InteractiveBlueprintViewer.resize()` measures `containerElem.clientWidth` and `clientHeight` directly instead of relying solely on window resize listeners.
-- **Zoom & Coordinate Space**: Expanded minimum zoom limit from `0.1` down to `0.02` to support rendering massive factory blueprints. Computed drag and wheel coordinates via DPR canvas aspect ratios (`scaleX = canvas.width / rect.width`).
+- **Zoom & Coordinate Space**: Expanded minimum zoom limit from `0.1` down to `0.02` to support rendering massive factory blueprints. Computed wheel zoom focal coordinates via CSS-to-backing-store canvas scaling (`scaleX = canvas.width / rect.width`).
 - **Recenter Control**: Bound Recenter button via Shapez native `dialog.trackClicks(recenterBtn, () => viewer.recenter())` with `pointerdown` `stopPropagation`.
 - **Deserialization Pass Optimization**: Extracted `resolveBpStringMod` and `deserializeBlueprintEntities`. `getBlueprintEntityCount` and `getBlueprintCost` now accept pre-deserialized entity arrays, eliminating redundant deserialization calls per card render and preview initialization.
 

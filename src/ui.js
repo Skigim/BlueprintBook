@@ -14,10 +14,16 @@ export function registerNativeChangelogEntry() {
     if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
         const id = `Blueprint Book v${METADATA.version}`;
         if (!shapez.CHANGELOG.some(item => item.version === id)) {
+            const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
+            const matchingEntry = Array.isArray(MOD_CHANGELOG)
+                ? MOD_CHANGELOG.find(item => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer)
+                : null;
+            const entries = getReleaseNotesForVersion(METADATA.version);
+            const date = (matchingEntry && matchingEntry.date) || "2026-07-24";
             shapez.CHANGELOG.unshift({
                 version: id,
-                date: (MOD_CHANGELOG[0] && MOD_CHANGELOG[0].date) || "2026-07-24",
-                entries: MOD_CHANGELOG[0].entries
+                date,
+                entries
             });
         }
     }
@@ -43,6 +49,14 @@ export function getLockedEntitiesInBlueprint(root, entities) {
         }
     }
     return locked;
+}
+
+export function isBlueprintsUnlocked(root) {
+    if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
+        const reward = (shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints) || "reward_blueprints";
+        return root.hubGoals.isRewardUnlocked(reward);
+    }
+    return true;
 }
 
 export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
@@ -288,11 +302,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     isBlueprintsUnlocked() {
-        if (this.root && this.root.hubGoals && typeof this.root.hubGoals.isRewardUnlocked === "function") {
-            const reward = (shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints) || "reward_blueprints";
-            return this.root.hubGoals.isRewardUnlocked(reward);
-        }
-        return true;
+        return isBlueprintsUnlocked(this.root);
     }
 
     showBlueprintsNotUnlocked() {
@@ -416,8 +426,16 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
 
         try {
-            const modLoader = shapez.BlueprintLibraryModLoader;
-            const bpMod = modLoader.mods.find(m => m.metadata.id === "bp-string");
+            const modLoader = shapez?.BlueprintLibraryModLoader;
+            if (!modLoader || !Array.isArray(modLoader.mods)) {
+                this.notify("Blueprint strings mod loader unavailable.", NOTIFY.error);
+                return;
+            }
+            const bpMod = modLoader.mods.find(m => m?.metadata?.id === "bp-string");
+            if (!bpMod || !bpMod.constructor || typeof bpMod.constructor.deserialize !== "function") {
+                this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
+                return;
+            }
             const entities = bpMod.constructor.deserialize(this.root, blueprintString);
             
             if (entities) {
@@ -529,8 +547,22 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         const reqDiv = document.createElement('div');
         reqDiv.className = 'requirements';
 
-        const entities = deserializeBlueprintEntities(this.root, bp.value);
-        const cost = getBlueprintCost(this.root, entities);
+        if (!this._cardCache) {
+            this._cardCache = new Map();
+        }
+
+        const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
+        let cached = this._cardCache.get(cacheKey);
+        if (!cached) {
+            const entities = deserializeBlueprintEntities(this.root, bp?.value);
+            const cost = getBlueprintCost(this.root, entities);
+            const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
+            cached = { entities, cost, lockedEntities };
+            this._cardCache.set(cacheKey, cached);
+        }
+
+        const { entities, cost, lockedEntities } = cached;
+
         if (cost !== null && cost !== undefined) {
             const costElem = renderBlueprintCostElement(this.root, cost, 24);
             reqDiv.appendChild(costElem);
@@ -550,10 +582,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         equipBtn.className = 'button styledButton good bplib-btn-equip';
         equipBtn.textContent = 'EQUIP';
         trackClick(equipBtn, () => {
+            if (lockedEntities && lockedEntities.length > 0) return;
             this.equipBlueprint(bp.value);
         });
 
-        const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
         if (lockedEntities && lockedEntities.length > 0) {
             equipBtn.classList.add("disabled");
             equipBtn.disabled = true;

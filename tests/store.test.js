@@ -177,21 +177,23 @@ describe('BlueprintStore Logic', () => {
                 removeItem: (k) => { delete store[k]; }
             };
             const originalLS = globalThis.localStorage;
-            globalThis.localStorage = mockLocalStorage;
+            try {
+                globalThis.localStorage = mockLocalStorage;
 
-            globalThis.localStorage.setItem('bplib_blueprints', JSON.stringify(legacyBps));
+                globalThis.localStorage.setItem('bplib_blueprints', JSON.stringify(legacyBps));
 
-            const modEmpty = {
-                settings: { blueprints: [] },
-                saveSettings: () => {}
-            };
+                const modEmpty = {
+                    settings: { blueprints: [] },
+                    saveSettings: () => {}
+                };
 
-            await BlueprintStore.init(modEmpty);
+                await BlueprintStore.init(modEmpty);
 
-            expect(modEmpty.settings.blueprints).toHaveLength(1);
-            expect(modEmpty.settings.blueprints[0].name).toBe("LS Blueprint");
-
-            globalThis.localStorage = originalLS;
+                expect(modEmpty.settings.blueprints).toHaveLength(1);
+                expect(modEmpty.settings.blueprints[0].name).toBe("LS Blueprint");
+            } finally {
+                globalThis.localStorage = originalLS;
+            }
         });
 
         it('merges missing legacy blueprints without duplicating existing blueprints when current blueprints array is non-empty', async () => {

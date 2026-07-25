@@ -21,7 +21,11 @@ global.shapez = {
     }
 };
 
-const { HUDBlueprintLibrary } = await import('../src/ui.js');
+vi.mock('../src/updater.js', () => ({
+    checkForUpdates: vi.fn().mockResolvedValue({ updateAvailable: false })
+}));
+
+const { HUDBlueprintLibrary, isBlueprintsUnlocked, registerNativeChangelogEntry } = await import('../src/ui.js');
 
 vi.mock('../lib/ui.js', () => ({
     createTextAreaFormElement: vi.fn(() => ({
@@ -238,10 +242,6 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         // Reset hasCheckedUpdate flag for testing fresh instance
         HUDBlueprintLibrary.hasCheckedUpdate = false;
-
-        // Mock checkForUpdates to return no update
-        const updater = await import('../src/updater.js');
-        vi.spyOn(updater, 'checkForUpdates').mockResolvedValue({ updateAvailable: false });
 
         await hudLibrary1.checkUpdateOnce();
 
@@ -710,6 +710,24 @@ describe('async equipBlueprint', () => {
         expect(mockRoot.hud.signals.pasteBlueprintRequested.dispatch).not.toHaveBeenCalled();
     });
 
+    it('_createBlueprintCard caches derived entity calculations per blueprint id and value key', () => {
+        const bp = { id: 'bp_cache_1', name: 'Cache BP', value: 'CACHE_BP_VALUE', tags: [] };
+        const deserializeSpy = global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize;
+        deserializeSpy.mockClear();
+
+        hudLibrary._createBlueprintCard(bp, () => {});
+        const callCountAfterFirstRender = deserializeSpy.mock.calls.length;
+
+        // Second render with same bp.id and bp.value should hit cache without calling deserialize again
+        hudLibrary._createBlueprintCard(bp, () => {});
+        expect(deserializeSpy.mock.calls.length).toBe(callCountAfterFirstRender);
+
+        // Render with changed bp.value should invalidate cache and compute again
+        const bpUpdated = { id: 'bp_cache_1', name: 'Cache BP', value: 'NEW_CACHE_BP_VALUE', tags: [] };
+        hudLibrary._createBlueprintCard(bpUpdated, () => {});
+        expect(deserializeSpy.mock.calls.length).toBeGreaterThan(callCountAfterFirstRender);
+    });
+
     it('_createBlueprintCard disables equip button and sets title tooltip when blueprint contains locked entities', () => {
         const lockedEntity = {
             components: {
@@ -731,11 +749,70 @@ describe('async equipBlueprint', () => {
         expect(equipBtn.title).toBe('Contains locked buildings (unlocked at higher level)');
     });
 
+    it('shows error and returns early without closing when modLoader is missing or invalid', async () => {
+        global.shapez.BlueprintLibraryModLoader = null;
+        hudLibrary.close = vi.fn();
+        hudLibrary.notify = vi.fn();
+
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        expect(hudLibrary.notify).toHaveBeenCalledWith('Blueprint strings mod loader unavailable.', 'error');
+        expect(hudLibrary.close).not.toHaveBeenCalled();
+    });
+
+    it('shows error and returns early without closing when bp-string mod is not found', async () => {
+        global.shapez.BlueprintLibraryModLoader = { mods: [] };
+        hudLibrary.close = vi.fn();
+        hudLibrary.notify = vi.fn();
+
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        expect(hudLibrary.notify).toHaveBeenCalledWith('Blueprint string deserializer unavailable.', 'error');
+        expect(hudLibrary.close).not.toHaveBeenCalled();
+    });
+
     it('emits paste event and calls close()', async () => {
         await hudLibrary.equipBlueprint('TEST_BP_STRING');
 
         expect(mockRoot.keymapper.emit).toHaveBeenCalledWith('pasteBlueprintRequested');
         expect(hudLibrary.close).toHaveBeenCalled();
+    });
+});
+
+describe('isBlueprintsUnlocked', () => {
+    it('returns true (fail-open) when root or hubGoals is null/undefined', () => {
+        expect(isBlueprintsUnlocked(null)).toBe(true);
+        expect(isBlueprintsUnlocked({})).toBe(true);
+        expect(isBlueprintsUnlocked({ hubGoals: {} })).toBe(true);
+    });
+
+    it('returns true (fail-open) when hubGoals exists but lacks isRewardUnlocked method', () => {
+        const root = { hubGoals: { isBuildingUnlocked: vi.fn() } };
+        expect(isBlueprintsUnlocked(root)).toBe(true);
+    });
+
+    it('delegates to hubGoals.isRewardUnlocked when method is present', () => {
+        const isRewardUnlocked = vi.fn().mockReturnValue(false);
+        const root = { hubGoals: { isRewardUnlocked } };
+        expect(isBlueprintsUnlocked(root)).toBe(false);
+        expect(isRewardUnlocked).toHaveBeenCalledWith('reward_blueprints');
+    });
+});
+
+describe('registerNativeChangelogEntry', () => {
+    it('populates shapez.CHANGELOG with entry matching METADATA.version and does not duplicate', () => {
+        global.shapez.CHANGELOG = [];
+        registerNativeChangelogEntry();
+
+        expect(global.shapez.CHANGELOG.length).toBe(1);
+        expect(global.shapez.CHANGELOG[0].version).toBe('Blueprint Book v1.0.2');
+        expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-24');
+        expect(Array.isArray(global.shapez.CHANGELOG[0].entries)).toBe(true);
+        expect(global.shapez.CHANGELOG[0].entries.length).toBeGreaterThan(0);
+
+        // Subsequent calls should not duplicate the entry
+        registerNativeChangelogEntry();
+        expect(global.shapez.CHANGELOG.length).toBe(1);
     });
 });
 

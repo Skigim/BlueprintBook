@@ -235,7 +235,7 @@ export class InteractiveBlueprintViewer {
     render() {
         if (!this.ctx) return;
         const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-        if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector) return;
+        if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector || !gShapez.Rectangle) return;
 
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -371,6 +371,8 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
 
     if (dialog.buttonSignals && dialog.buttonSignals.equip) {
         dialog.buttonSignals.equip.add(() => {
+            const locked = getLockedEntitiesInBlueprint(root, entities || blueprint);
+            if (locked && locked.length > 0) return;
             if (viewer) {
                 try { viewer.cleanup(); } catch (e) {}
             }
