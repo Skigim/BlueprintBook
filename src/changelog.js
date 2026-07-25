@@ -1,5 +1,12 @@
 export const MOD_CHANGELOG = [
     {
+        version: "1.0.3",
+        date: "2026-07-24",
+        entries: [
+            "<strong>Development Version</strong>: Initializing 1.0.3 development release."
+        ]
+    },
+    {
         version: "1.0.2",
         date: "2026-07-24",
         entries: [

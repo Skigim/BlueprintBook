@@ -2,6 +2,12 @@
 
 All notable changes to the **Blueprint Book** mod will be documented in this file.
 
+## [1.0.3] - Unreleased
+
+### Added
+
+- Initialized 1.0.3 development release.
+
 ## [1.0.2] - 2026-07-24
 
 ### Added

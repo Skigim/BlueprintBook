@@ -26,6 +26,7 @@ vi.mock('../src/updater.js', () => ({
 }));
 
 const { HUDBlueprintLibrary, isBlueprintsUnlocked, registerNativeChangelogEntry } = await import('../src/ui.js');
+const { METADATA } = await import('../src/metadata.js');
 
 vi.mock('../lib/ui.js', () => ({
     createTextAreaFormElement: vi.fn(() => ({
@@ -245,8 +246,8 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         await hudLibrary1.checkUpdateOnce();
 
-        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith('1.0.2');
-        expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.2');
+        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith(METADATA.version);
+        expect(BlueprintStore.getLastSeenVersion()).toBe(METADATA.version);
 
         // Simulate subsequent save load or new game session
         HUDBlueprintLibrary.hasCheckedUpdate = false;
@@ -805,7 +806,7 @@ describe('registerNativeChangelogEntry', () => {
         registerNativeChangelogEntry();
 
         expect(global.shapez.CHANGELOG.length).toBe(1);
-        expect(global.shapez.CHANGELOG[0].version).toBe('Blueprint Book v1.0.2');
+        expect(global.shapez.CHANGELOG[0].version).toBe(`Blueprint Book v${METADATA.version}`);
         expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-24');
         expect(Array.isArray(global.shapez.CHANGELOG[0].entries)).toBe(true);
         expect(global.shapez.CHANGELOG[0].entries.length).toBeGreaterThan(0);
