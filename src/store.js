@@ -1,9 +1,31 @@
 export const BlueprintStore = {
     mod: null,
 
-    init(mod) {
+    async init(mod, readFileAsync = null, listKeysAsync = null) {
+        if (!mod || typeof mod !== "object") return;
         this.mod = mod;
-        if (!Array.isArray(mod.settings.blueprints)) mod.settings.blueprints = [];
+
+        if (!mod.settings || typeof mod.settings !== "object") {
+            mod.settings = {};
+        }
+
+        if (!Array.isArray(mod.settings.blueprints)) {
+            mod.settings.blueprints = [];
+        }
+
+        if (!Array.isArray(mod.settings.deletedValues)) {
+            mod.settings.deletedValues = [];
+        }
+        if (!Array.isArray(mod.settings.deletedNames)) {
+            mod.settings.deletedNames = [];
+        }
+
+        const currentVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "";
+        if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
+            await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+            mod.settings.migrationVersion = currentVersion;
+        }
+
         if (typeof mod.settings.nextBlueprintId !== "number" || mod.settings.nextBlueprintId < 1) {
             mod.settings.nextBlueprintId = 1;
         }
@@ -31,11 +53,271 @@ export const BlueprintStore = {
             };
         }).filter(Boolean);
 
+        if (typeof mod.settings.lastSeenVersion !== "string") {
+            mod.settings.lastSeenVersion = "";
+        }
+        if (typeof mod.settings.skippedVersion !== "string") {
+            mod.settings.skippedVersion = "";
+        }
+
         const maxId = mod.settings.blueprints.reduce((max, b) => Math.max(max, b.id || 0), 0);
         if (mod.settings.nextBlueprintId <= maxId) {
             mod.settings.nextBlueprintId = maxId + 1;
         }
         this.persist();
+    },
+
+    _mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues = [], deletedNames = []) {
+        if (!bp || (!bp.value && !bp.name)) return false;
+        const dVals = Array.isArray(deletedValues) ? deletedValues : [];
+        const dNames = Array.isArray(deletedNames) ? deletedNames : [];
+        if (bp.value && dVals.includes(bp.value)) return false;
+        if (bp.name && dNames.includes(bp.name)) return false;
+        if (!existingValues.has(bp.value) && !existingNames.has(bp.name)) {
+            currentBlueprints.push(bp);
+            if (bp.value) existingValues.add(bp.value);
+            if (bp.name) existingNames.add(bp.name);
+            return true;
+        }
+        return false;
+    },
+
+    async migrateLegacySettings(mod, readFileAsync, listKeysAsync) {
+        const currentBlueprints = Array.isArray(mod.settings.blueprints) ? mod.settings.blueprints : [];
+        const existingValues = new Set(currentBlueprints.map(bp => bp && bp.value).filter(Boolean));
+        const existingNames = new Set(currentBlueprints.map(bp => bp && bp.name).filter(Boolean));
+
+        const deletedValues = Array.isArray(mod.settings.deletedValues) ? mod.settings.deletedValues : [];
+        const deletedNames = Array.isArray(mod.settings.deletedNames) ? mod.settings.deletedNames : [];
+
+        let migratedAny = false;
+
+        let reader = null;
+        if (typeof readFileAsync === "function") {
+            reader = readFileAsync;
+        } else if (typeof app !== "undefined" && app && app.storage && typeof app.storage.readFileAsync === "function") {
+            reader = (file) => app.storage.readFileAsync(file);
+        } else if (typeof window !== "undefined" && window.app && window.app.storage && typeof window.app.storage.readFileAsync === "function") {
+            reader = (file) => window.app.storage.readFileAsync(file);
+        }
+
+        let scanExecutedSuccessfully = false;
+        const scannedLegacyValues = new Set();
+        const scannedLegacyNames = new Set();
+
+        // 1. Try reading from previous Shapez storage files via the storage reader
+        if (reader) {
+            try {
+                scanExecutedSuccessfully = true;
+                const candidateFiles = await this.getDynamicCandidateFiles(mod, listKeysAsync);
+
+                for (const file of candidateFiles) {
+                    try {
+                        const raw = await reader(file);
+                        if (raw) {
+                            const parsed = JSON.parse(raw);
+                            if (parsed && Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
+                                for (const bp of parsed.blueprints) {
+                                    if (bp) {
+                                        if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
+                                        if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
+                                    }
+                                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                                        migratedAny = true;
+                                    }
+                                }
+                                if (Array.isArray(parsed.availableTags)) {
+                                    mod.settings.availableTags = mod.settings.availableTags || [];
+                                    parsed.availableTags.forEach(t => {
+                                        if (!mod.settings.availableTags.includes(t)) {
+                                            mod.settings.availableTags.push(t);
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        const errStr = e ? (e.message || String(e)) : "";
+                        if (errStr !== "file_not_found") {
+                            scanExecutedSuccessfully = false;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("[BlueprintBook] Migration read failure:", err);
+                scanExecutedSuccessfully = false;
+            }
+        }
+
+        // 2. Fallback to localStorage keys
+        try {
+            if (typeof localStorage !== "undefined") {
+                const legacyKeys = [
+                    "bplib_blueprints",
+                    "blueprint_library_blueprints",
+                    "blueprints",
+                    "bp_library_settings",
+                ];
+                for (const key of legacyKeys) {
+                    const item = localStorage.getItem(key);
+                    if (item) {
+                        try {
+                            const parsed = JSON.parse(item);
+                            const bps = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.blueprints) ? parsed.blueprints : null);
+                            if (bps && bps.length > 0) {
+                                for (const bp of bps) {
+                                    if (bp) {
+                                        if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
+                                        if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
+                                    }
+                                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                                        migratedAny = true;
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn(`[BlueprintBook] Error parsing localStorage key "${key}":`, e);
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+
+        if (migratedAny) {
+            mod.settings.blueprints = currentBlueprints;
+        }
+
+        if (scanExecutedSuccessfully) {
+            mod.settings.deletedValues = deletedValues.filter(v => scannedLegacyValues.has(v));
+            mod.settings.deletedNames = deletedNames.filter(n => scannedLegacyNames.has(n));
+        }
+    },
+
+    async getDynamicCandidateFiles(mod, listKeysAsync = null) {
+        const modId = (mod && mod.meta && mod.meta.id) ? mod.meta.id : "bp-library";
+        const currentVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "";
+        const currentFile = `modsettings_${modId}__${currentVersion}.json`;
+
+        const candidates = new Set();
+
+        // 1. Dynamic key listing from IndexedDB
+        if (typeof listKeysAsync === "function") {
+            try {
+                const idbKeys = await listKeysAsync();
+                for (const key of idbKeys) {
+                    if (typeof key === "string" && key !== currentFile) {
+                        if (key.includes("modsettings") || key.includes("bp") || key.includes("blueprint") || key.includes("library")) {
+                            candidates.add(key);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("[BlueprintBook] Failed to list IndexedDB keys:", e);
+            }
+        }
+
+        // Semver-based version generator
+        const knownIds = Array.from(new Set([
+            modId,
+            "bp-library",
+            "bp_library",
+            "BlueprintLibrary",
+            "blueprint_library",
+            "blueprint-library",
+            "BlueprintBook",
+            "bp-book",
+            "bp_book",
+            "blueprintbook"
+        ]));
+        const versionSet = new Set();
+
+        if (currentVersion) {
+            const parts = currentVersion.split(".").map(n => parseInt(n, 10));
+            if (parts.length >= 3 && !parts.some(isNaN)) {
+                const [major, minor, patch] = parts;
+                for (let p = patch - 1; p >= 0; p--) {
+                    versionSet.add(`${major}.${minor}.${p}`);
+                    versionSet.add(`${major}.${minor}`);
+                }
+                for (let m = minor - 1; m >= 0; m--) {
+                    versionSet.add(`${major}.${m}.0`);
+                    versionSet.add(`${major}.${m}`);
+                }
+                for (let maj = major - 1; maj >= 0; maj--) {
+                    versionSet.add(`${maj}.0.0`);
+                    versionSet.add(`${maj}.0`);
+                }
+            } else if (parts.length === 2 && !parts.some(isNaN)) {
+                const [major, minor] = parts;
+                for (let m = minor - 1; m >= 0; m--) {
+                    versionSet.add(`${major}.${m}`);
+                }
+            }
+        }
+
+        // Standard fallback versions
+        ["1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach(v => versionSet.add(v));
+
+        for (const id of knownIds) {
+            for (const ver of versionSet) {
+                const filename = `modsettings_${id}__${ver}.json`;
+                if (filename !== currentFile) {
+                    candidates.add(filename);
+                }
+            }
+        }
+
+        return Array.from(candidates);
+    },
+
+    getLastSeenVersion() {
+        if (this.mod && this.mod.settings && typeof this.mod.settings.lastSeenVersion === "string" && this.mod.settings.lastSeenVersion) {
+            return this.mod.settings.lastSeenVersion;
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                return localStorage.getItem("bplib_last_seen_version") || "";
+            }
+        } catch (e) {}
+        return "";
+    },
+
+    setLastSeenVersion(version) {
+        const v = String(version || "");
+        if (this.mod && this.mod.settings) {
+            this.mod.settings.lastSeenVersion = v;
+            this.persist();
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                localStorage.setItem("bplib_last_seen_version", v);
+            }
+        } catch (e) {}
+    },
+
+    getSkippedVersion() {
+        if (this.mod && this.mod.settings && typeof this.mod.settings.skippedVersion === "string" && this.mod.settings.skippedVersion) {
+            return this.mod.settings.skippedVersion;
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                return localStorage.getItem("bplib_skipped_version") || "";
+            }
+        } catch (e) {}
+        return "";
+    },
+
+    setSkippedVersion(version) {
+        const v = String(version || "");
+        if (this.mod && this.mod.settings) {
+            this.mod.settings.skippedVersion = v;
+            this.persist();
+        }
+        try {
+            if (typeof localStorage !== "undefined") {
+                localStorage.setItem("bplib_skipped_version", v);
+            }
+        } catch (e) {}
     },
 
     pruneTags() {
@@ -50,6 +332,7 @@ export const BlueprintStore = {
     getTags() { return this.mod.settings.availableTags; },
     
     ensureTags(tags) {
+        if (!Array.isArray(tags)) return;
         let changed = false;
         tags.forEach(t => {
             if (!this.mod.settings.availableTags.includes(t)) {
@@ -63,15 +346,16 @@ export const BlueprintStore = {
     add(name, value, tags = []) {
         const cleanValue = String(value || "").replace(/\r\n/g, "\n").trim();
         const id = this.mod.settings.nextBlueprintId++;
+        const safeTags = Array.isArray(tags) ? tags : [];
         const entry = {
             id,
             name: name && name.trim() ? name.trim() : "Blueprint " + id,
             value: cleanValue,
-            tags,
+            tags: safeTags,
             createdAt: Date.now(),
         };
         this.mod.settings.blueprints.push(entry);
-        this.ensureTags(tags);
+        this.ensureTags(safeTags);
         this.persist();
         return entry;
     },
@@ -100,6 +384,21 @@ export const BlueprintStore = {
     remove(id) {
         const idx = this.mod.settings.blueprints.findIndex(e => e.id === id);
         if (idx === -1) return false;
+        const entry = this.mod.settings.blueprints[idx];
+        if (entry) {
+            if (!Array.isArray(this.mod.settings.deletedValues)) {
+                this.mod.settings.deletedValues = [];
+            }
+            if (!Array.isArray(this.mod.settings.deletedNames)) {
+                this.mod.settings.deletedNames = [];
+            }
+            if (entry.value && typeof entry.value === "string" && !this.mod.settings.deletedValues.includes(entry.value)) {
+                this.mod.settings.deletedValues.push(entry.value);
+            }
+            if (entry.name && typeof entry.name === "string" && !this.mod.settings.deletedNames.includes(entry.name)) {
+                this.mod.settings.deletedNames.push(entry.name);
+            }
+        }
         this.mod.settings.blueprints.splice(idx, 1);
         this.pruneTags();
         this.persist();
@@ -108,9 +407,9 @@ export const BlueprintStore = {
 
     persist() {
         try {
-            if (this.mod.saveSettings) this.mod.saveSettings();
+            if (this.mod && this.mod.saveSettings) this.mod.saveSettings();
         } catch (err) {
-            console.error("[bp-book] Failed to save settings", err);
+            console.error("[BlueprintBook] Failed to save settings:", err);
         }
     },
 };

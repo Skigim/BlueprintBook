@@ -11,12 +11,21 @@ global.shapez = {
         }
         cleanup() {}
     },
+    FormElementInput: class {
+        constructor(opts) {
+            Object.assign(this, opts);
+        }
+    },
     BlueprintLibraryModLoader: {
         mods: []
     }
 };
 
-const { HUDBlueprintLibrary } = await import('../src/ui.js');
+vi.mock('../src/updater.js', () => ({
+    checkForUpdates: vi.fn().mockResolvedValue({ updateAvailable: false })
+}));
+
+const { HUDBlueprintLibrary, isBlueprintsUnlocked, registerNativeChangelogEntry } = await import('../src/ui.js');
 
 vi.mock('../lib/ui.js', () => ({
     createTextAreaFormElement: vi.fn(() => ({
@@ -214,4 +223,598 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
         expect(global.shapez.Dialog).toHaveBeenCalled();
         expect(mockRoot.hud.parts.dialogs.internalShowDialog).toHaveBeenCalledWith(mockDialog);
     });
+
+    it('shows welcome dialog on first load of version and suppresses it when version is already seen', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: {}, saveSettings: () => {} });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn() }
+                }
+            }
+        };
+
+        const hudLibrary1 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary1.showWelcomeDialog = vi.fn();
+
+        // Reset hasCheckedUpdate flag for testing fresh instance
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+
+        await hudLibrary1.checkUpdateOnce();
+
+        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith('1.0.2');
+        expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.2');
+
+        // Simulate subsequent save load or new game session
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+        const hudLibrary2 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary2.showWelcomeDialog = vi.fn();
+
+        await hudLibrary2.checkUpdateOnce();
+
+        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion ('1.0.2')
+        expect(hudLibrary2.showWelcomeDialog).not.toHaveBeenCalled();
+    });
 });
+
+describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
+    it('defines min-height: 0 and pointer-events: auto on .bplib-grid and pointer-events: auto on .bplib-dialog-content in styles.js', async () => {
+        const { CSS } = await import('../src/styles.js');
+
+        // Check CSS rules for .bplib-dialog-content
+        expect(CSS).toMatch(/\.bplib-dialog-content\s*\{[^}]*pointer-events:\s*auto;/);
+
+        // Check CSS rules for .bplib-grid
+        expect(CSS).toMatch(/\.bplib-grid\s*\{[^}]*min-height:\s*0;/);
+        expect(CSS).toMatch(/\.bplib-grid\s*\{[^}]*pointer-events:\s*auto;/);
+    });
+
+    it('defines grid-column: 2 / 3 for .bplib-upgrade-actions matching 2-column grid layout in styles.js', async () => {
+        const { CSS } = await import('../src/styles.js');
+
+        expect(CSS).toMatch(/\.bplib-upgrade\s*\{[^}]*grid-template-columns:\s*1fr\s+auto;/);
+        expect(CSS).toMatch(/\.bplib-upgrade\s+\.bplib-upgrade-actions\s*\{[^}]*grid-column:\s*2\s*\/\s*3;/);
+    });
+
+    it('attaches a wheel event listener to #bplib-grid that calls stopPropagation', async () => {
+        const mockDialogElem = document.createElement('div');
+        const mockOverlay = document.createElement('div');
+        mockOverlay.innerHTML = `
+            <div class="bplib-dialog-content">
+                <div id="bplib-search"></div>
+                <div id="bplib-btn-import"></div>
+                <div id="bplib-filter-tags"></div>
+                <div id="bplib-grid" class="bplib-grid"></div>
+            </div>
+        `;
+
+        const mockDialog = {
+            dialogElem: mockDialogElem,
+            element: mockOverlay,
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn() },
+                    blueprintPlacer: { currentBlueprint: { set: vi.fn() } }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.render = vi.fn();
+
+        hudLibrary.show();
+
+        const gridElem = mockOverlay.querySelector('#bplib-grid');
+        expect(gridElem).not.toBeNull();
+
+        // Dispatch a wheel event and verify stopPropagation is called
+        const wheelEvent = new Event('wheel', { bubbles: true, cancelable: true });
+        const stopPropagationSpy = vi.spyOn(wheelEvent, 'stopPropagation');
+
+        gridElem.dispatchEvent(wheelEvent);
+
+        expect(stopPropagationSpy).toHaveBeenCalled();
+    });
+
+    it('adds dialogUpgrades class to dialog.dialogElem when show() is called', async () => {
+        const mockDialogElem = document.createElement('div');
+        const mockOverlay = document.createElement('div');
+        const mockDialog = {
+            dialogElem: mockDialogElem,
+            element: mockOverlay,
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
+
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn() }
+                }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.render = vi.fn();
+
+        hudLibrary.show();
+
+        expect(mockDialogElem.classList.contains('dialogUpgrades')).toBe(true);
+    });
+});
+
+describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        global.shapez.FormElementInput = class {
+            constructor(opts) {
+                Object.assign(this, opts);
+            }
+        };
+
+        mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    },
+                    blueprintPlacer: {
+                        currentBlueprint: { set: vi.fn() }
+                    }
+                },
+                signals: {
+                    notification: { dispatch: vi.fn() },
+                    pasteBlueprintRequested: { dispatch: vi.fn() }
+                }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.registerClickDetector = vi.fn();
+    });
+
+    it('resets visible to false and cleans up dialog when equipBlueprint is called', async () => {
+        let mockDialogInstance;
+        global.shapez.Dialog = class {
+            constructor(opts) {
+                const elem = document.createElement('div');
+                elem.innerHTML = opts.contentHTML || opts.content || '';
+                this.dialogElem = elem;
+                this.element = elem;
+                this.trackClicks = vi.fn();
+                this.closeRequested = { add: vi.fn(), dispatch: vi.fn() };
+                mockDialogInstance = this;
+            }
+        };
+        global.shapez.ClickDetector = class { constructor() { this.click = { add: vi.fn() }; } };
+        global.shapez.Blueprint = class { constructor(e) {} };
+        global.shapez.BlueprintLibraryModLoader = {
+            mods: [{
+                metadata: { id: 'bp-string' },
+                constructor: { deserialize: () => [{ uid: 1 }] }
+            }]
+        };
+
+        hudLibrary.show();
+        expect(hudLibrary.visible).toBe(true);
+
+        await hudLibrary.equipBlueprint('VALID_BP_STRING');
+
+        expect(mockRoot.hud.parts.dialogs.closeDialog).toHaveBeenCalledWith(mockDialogInstance);
+        expect(hudLibrary.visible).toBe(false);
+        expect(hudLibrary.dialog).toBeNull();
+    });
+
+    it('removes summary badge and BP tier badge entirely from card, and styles PREVIEW button natively', () => {
+        const bp = { id: 'bp_1', name: 'Test BP', value: 'VALID_BP_STRING', tags: ['mining'] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+
+        // Summary badge and BP tier badge should be completely removed
+        const summaryBadge = card.querySelector('.bplib-summary-badge');
+        expect(summaryBadge).toBeNull();
+
+        const tierBadge = card.querySelector('.tier');
+        expect(tierBadge).toBeNull();
+
+        // PREVIEW button should carry native Shapez button classes
+        const previewBtn = card.querySelector('.bplib-btn-preview');
+        expect(previewBtn).not.toBeNull();
+        expect(previewBtn.classList.contains('button')).toBe(true);
+        expect(previewBtn.classList.contains('styledButton')).toBe(true);
+    });
+
+    it('renders search input with native input-text class and configures import dialog with defaultValue "" and closeButton false', () => {
+        hudLibrary.show();
+        const searchInput = hudLibrary.overlay.querySelector('#bplib-search');
+        expect(searchInput.classList.contains('input-text')).toBe(true);
+
+        let capturedFormOpts = null;
+        global.shapez.DialogWithForm = vi.fn().mockImplementation(function (opts) {
+            capturedFormOpts = opts;
+            this.element = document.createElement('div');
+            this.closeRequested = { add: vi.fn() };
+            return this;
+        });
+
+        hudLibrary.openImportDialog();
+        expect(capturedFormOpts).not.toBeNull();
+        expect(capturedFormOpts.closeButton).toBe(false);
+        const nameFormElem = capturedFormOpts.formElements.find(e => e.id === 'name');
+        expect(nameFormElem).toBeDefined();
+        expect(nameFormElem.defaultValue).toBe('');
+    });
+});
+
+describe('Task 2: Card className Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() },
+                    blueprintPlacer: { currentBlueprint: { set: vi.fn() } }
+                },
+                signals: { notification: { dispatch: vi.fn(), pasteBlueprintRequested: { dispatch: vi.fn() } } }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+    });
+
+    it('sets card className to "bplib-upgrade shopCard"', () => {
+        const bp = { id: 'bp_1', name: 'Test BP', value: 'VALID_BP_STRING', tags: ['mining'] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+        expect(card.classList.contains('bplib-upgrade')).toBe(true);
+        expect(card.classList.contains('shopCard')).toBe(true);
+    });
+});
+
+describe('Reward-Based Blueprint Unlock Gating', () => {
+    let mockRoot;
+    let hudLibrary;
+    let showInfoSpy;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        showInfoSpy = vi.fn();
+
+        mockRoot = {
+            app: {},
+            hubGoals: {
+                isRewardUnlocked: vi.fn()
+            },
+            hud: {
+                parts: {
+                    dialogs: { showInfo: showInfoSpy, internalShowDialog: vi.fn(), closeDialog: vi.fn() },
+                    massSelector: { selectedUids: new Set(['uid1', 'uid2']) }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            },
+            entityMgr: { findByUid: vi.fn(uid => ({ id: uid })) }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.registerClickDetector = vi.fn();
+        hudLibrary.initialize();
+    });
+
+    it('blocks show() before level 12 and displays blueprintsNotUnlocked dialog', () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(false);
+
+        hudLibrary.show();
+
+        expect(showInfoSpy).toHaveBeenCalled();
+        expect(hudLibrary.visible).toBe(false);
+        expect(hudLibrary.dialog).toBeFalsy();
+    });
+
+    it('allows show() after level 12 unlock', () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(true);
+
+        hudLibrary.show();
+
+        expect(showInfoSpy).not.toHaveBeenCalled();
+        expect(hudLibrary.visible).toBe(true);
+        expect(hudLibrary.dialog).not.toBeNull();
+    });
+
+    it('blocks handleSaveHotkey() before level 12 and displays blueprintsNotUnlocked dialog', () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(false);
+
+        const result = hudLibrary.handleSaveHotkey();
+
+        expect(result).toBe('stop_propagation');
+        expect(showInfoSpy).toHaveBeenCalled();
+    });
+
+    it('blocks equipBlueprint() before level 12 and displays blueprintsNotUnlocked dialog', async () => {
+        mockRoot.hubGoals.isRewardUnlocked.mockReturnValue(false);
+
+        await hudLibrary.equipBlueprint('VALID_BP_STRING');
+
+        expect(showInfoSpy).toHaveBeenCalled();
+    });
+});
+
+describe('async equipBlueprint', () => {
+    let mockRoot;
+    let hudLibrary;
+    let originalClipboard;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        originalClipboard = global.navigator.clipboard;
+
+        mockRoot = {
+            app: {},
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true),
+                isBuildingUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    },
+                    blueprintPlacer: {
+                        currentBlueprint: { set: vi.fn() },
+                        lastBlueprintUsed: null
+                    },
+                    notifications: {
+                        sendNotification: vi.fn()
+                    }
+                },
+                signals: {
+                    notification: { dispatch: vi.fn() },
+                    pasteBlueprintRequested: { dispatch: vi.fn() }
+                }
+            },
+            keymapper: {
+                emit: vi.fn()
+            }
+        };
+
+        global.shapez.Blueprint = class {
+            constructor(entities) {
+                this.entities = entities;
+            }
+        };
+
+        global.shapez.BlueprintLibraryModLoader = {
+            mods: [{
+                metadata: { id: 'bp-string' },
+                constructor: {
+                    deserialize: vi.fn().mockReturnValue([{ uid: 1, components: {} }])
+                }
+            }]
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.close = vi.fn(hudLibrary.close.bind(hudLibrary));
+    });
+
+    afterEach(() => {
+        if (originalClipboard !== undefined) {
+            Object.defineProperty(global.navigator, 'clipboard', {
+                value: originalClipboard,
+                configurable: true,
+                writable: true
+            });
+        } else {
+            delete global.navigator.clipboard;
+        }
+    });
+
+    it('sets lastBlueprintUsed synchronously before clipboard write completes', async () => {
+        let resolveClipboard;
+        const clipboardPromise = new Promise(resolve => { resolveClipboard = resolve; });
+        const writeTextMock = vi.fn().mockReturnValue(clipboardPromise);
+
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: { writeText: writeTextMock },
+            configurable: true,
+            writable: true
+        });
+
+        const equipPromise = hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        // Verify lastBlueprintUsed was set synchronously before clipboard Promise resolves
+        expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed).toBeDefined();
+        expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed.entities).toEqual([{ uid: 1, components: {} }]);
+
+        resolveClipboard();
+        await equipPromise;
+    });
+
+    it('attempts clipboard writeText with blueprintString and handles failures gracefully', async () => {
+        const writeTextMock = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: { writeText: writeTextMock },
+            configurable: true,
+            writable: true
+        });
+
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+        expect(writeTextMock).toHaveBeenCalledWith('TEST_BP_STRING');
+
+        // Test rejection handled gracefully without throwing
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        writeTextMock.mockRejectedValueOnce(new Error('Clipboard denied'));
+        await expect(hudLibrary.equipBlueprint('TEST_BP_STRING')).resolves.not.toThrow();
+        expect(consoleWarnSpy).toHaveBeenCalledWith('[BlueprintBook] Clipboard write failed:', expect.any(Error));
+        consoleWarnSpy.mockRestore();
+    });
+
+    it('dispatches warning notification and returns early without setting blueprint, clipboard, or paste event if locked entities exist', async () => {
+        const writeTextMock = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: { writeText: writeTextMock },
+            configurable: true,
+            writable: true
+        });
+
+        const lockedEntity = {
+            components: {
+                StaticMapEntity: {
+                    getMetaBuilding: () => ({ id: 'locked_building' })
+                }
+            }
+        };
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
+        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+
+        await hudLibrary.equipBlueprint('LOCKED_BP_STRING');
+
+        expect(mockRoot.hud.parts.notifications.sendNotification).toHaveBeenCalledWith(
+            'Blueprint contains locked buildings (unlocked at later levels)',
+            expect.anything()
+        );
+        expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed).toBeNull();
+        expect(mockRoot.hud.parts.blueprintPlacer.currentBlueprint.set).not.toHaveBeenCalled();
+        expect(writeTextMock).not.toHaveBeenCalled();
+        expect(mockRoot.keymapper.emit).not.toHaveBeenCalled();
+        expect(mockRoot.hud.signals.pasteBlueprintRequested.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('_createBlueprintCard caches derived entity calculations per blueprint id and value key', () => {
+        const bp = { id: 'bp_cache_1', name: 'Cache BP', value: 'CACHE_BP_VALUE', tags: [] };
+        const deserializeSpy = global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize;
+        deserializeSpy.mockClear();
+
+        hudLibrary._createBlueprintCard(bp, () => {});
+        const callCountAfterFirstRender = deserializeSpy.mock.calls.length;
+
+        // Second render with same bp.id and bp.value should hit cache without calling deserialize again
+        hudLibrary._createBlueprintCard(bp, () => {});
+        expect(deserializeSpy.mock.calls.length).toBe(callCountAfterFirstRender);
+
+        // Render with changed bp.value should invalidate cache and compute again
+        const bpUpdated = { id: 'bp_cache_1', name: 'Cache BP', value: 'NEW_CACHE_BP_VALUE', tags: [] };
+        hudLibrary._createBlueprintCard(bpUpdated, () => {});
+        expect(deserializeSpy.mock.calls.length).toBeGreaterThan(callCountAfterFirstRender);
+    });
+
+    it('_createBlueprintCard disables equip button and sets title tooltip when blueprint contains locked entities', () => {
+        const lockedEntity = {
+            components: {
+                StaticMapEntity: {
+                    getMetaBuilding: () => ({ id: 'locked_building' })
+                }
+            }
+        };
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
+        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+
+        const bp = { id: 'bp_locked', name: 'Locked BP', value: 'LOCKED_BP_STRING', tags: [] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+
+        const equipBtn = card.querySelector('.bplib-btn-equip');
+        expect(equipBtn).not.toBeNull();
+        expect(equipBtn.classList.contains('disabled')).toBe(true);
+        expect(equipBtn.disabled).toBe(true);
+        expect(equipBtn.title).toBe('Contains locked buildings (unlocked at higher level)');
+    });
+
+    it('shows error and returns early without closing when modLoader is missing or invalid', async () => {
+        global.shapez.BlueprintLibraryModLoader = null;
+        hudLibrary.close = vi.fn();
+        hudLibrary.notify = vi.fn();
+
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        expect(hudLibrary.notify).toHaveBeenCalledWith('Blueprint strings mod loader unavailable.', 'error');
+        expect(hudLibrary.close).not.toHaveBeenCalled();
+    });
+
+    it('shows error and returns early without closing when bp-string mod is not found', async () => {
+        global.shapez.BlueprintLibraryModLoader = { mods: [] };
+        hudLibrary.close = vi.fn();
+        hudLibrary.notify = vi.fn();
+
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        expect(hudLibrary.notify).toHaveBeenCalledWith('Blueprint string deserializer unavailable.', 'error');
+        expect(hudLibrary.close).not.toHaveBeenCalled();
+    });
+
+    it('emits paste event and calls close()', async () => {
+        await hudLibrary.equipBlueprint('TEST_BP_STRING');
+
+        expect(mockRoot.keymapper.emit).toHaveBeenCalledWith('pasteBlueprintRequested');
+        expect(hudLibrary.close).toHaveBeenCalled();
+    });
+});
+
+describe('isBlueprintsUnlocked', () => {
+    it('returns true (fail-open) when root or hubGoals is null/undefined', () => {
+        expect(isBlueprintsUnlocked(null)).toBe(true);
+        expect(isBlueprintsUnlocked({})).toBe(true);
+        expect(isBlueprintsUnlocked({ hubGoals: {} })).toBe(true);
+    });
+
+    it('returns true (fail-open) when hubGoals exists but lacks isRewardUnlocked method', () => {
+        const root = { hubGoals: { isBuildingUnlocked: vi.fn() } };
+        expect(isBlueprintsUnlocked(root)).toBe(true);
+    });
+
+    it('delegates to hubGoals.isRewardUnlocked when method is present', () => {
+        const isRewardUnlocked = vi.fn().mockReturnValue(false);
+        const root = { hubGoals: { isRewardUnlocked } };
+        expect(isBlueprintsUnlocked(root)).toBe(false);
+        expect(isRewardUnlocked).toHaveBeenCalledWith('reward_blueprints');
+    });
+});
+
+describe('registerNativeChangelogEntry', () => {
+    it('populates shapez.CHANGELOG with entry matching METADATA.version and does not duplicate', () => {
+        global.shapez.CHANGELOG = [];
+        registerNativeChangelogEntry();
+
+        expect(global.shapez.CHANGELOG.length).toBe(1);
+        expect(global.shapez.CHANGELOG[0].version).toBe('Blueprint Book v1.0.2');
+        expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-24');
+        expect(Array.isArray(global.shapez.CHANGELOG[0].entries)).toBe(true);
+        expect(global.shapez.CHANGELOG[0].entries.length).toBeGreaterThan(0);
+
+        // Subsequent calls should not duplicate the entry
+        registerNativeChangelogEntry();
+        expect(global.shapez.CHANGELOG.length).toBe(1);
+    });
+});
+
+
+

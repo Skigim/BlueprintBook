@@ -4,7 +4,7 @@
     id: "bp-library",
     name: "Blueprint Library",
     author: "Skigim",
-    version: "1.0.1",
+    version: "1.0.2",
     website: "",
     description: "A full rewrite of KiitikM's Blueprint Library mod. Features include: perfectly integrated native-style UI, custom tagging and filtering system, unified edit dialogs, and memory leak fixes.",
     minimumGameVersion: ">=1.5.0",
@@ -13,7 +13,11 @@
     settings: {
       blueprints: [],
       nextBlueprintId: 1,
-      availableTags: []
+      availableTags: [],
+      lastSeenVersion: "",
+      skippedVersion: "",
+      deletedValues: [],
+      deletedNames: []
     }
   };
 
@@ -22,10 +26,21 @@
   var CSS = `
     #ingame_HUD_GameMenu > .button.blueprintLibrary,
     #ingame_HUD_GameMenu > button.blueprintLibrary {
+        grid-column: 3;
         background-image: url("${BUTTON_ICON}");
         background-position: center center;
         background-repeat: no-repeat;
         background-size: 70%;
+    }
+
+    #ingame_HUD_GameMenu > .button.save,
+    #ingame_HUD_GameMenu > button.save {
+        grid-column: 4 !important;
+    }
+
+    #ingame_HUD_GameMenu > .button.settings,
+    #ingame_HUD_GameMenu > button.settings {
+        grid-column: 5 !important;
     }
 
     /* --- DIALOG OVERRIDES --- */
@@ -48,17 +63,20 @@
         width: 100%;
         height: 70vh;
         max-height: 800px;
+        pointer-events: auto;
     }
     .bplib-toolbar {
         display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
     }
     .bplib-grid {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
         padding-right: 10px;
         display: flex;
         flex-direction: column;
         gap: 10px;
+        pointer-events: auto;
     }
 
     /* --- STATISTICS: TAGS FILTER HEADER --- */
@@ -92,14 +110,15 @@
     /* --- SHOP: UPGRADE CARDS --- */
     .bplib-upgrade {
         display: grid;
-        grid-template-columns: auto 1fr auto;
-        grid-template-rows: 20px auto;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: 24px 1fr;
         background: #eee;
         border-radius: 7px;
-        padding: 5px 10px;
-        height: 85px;
-        grid-row-gap: 1px;
+        padding: 8px 12px;
+        height: 95px;
+        grid-row-gap: 4px;
         margin-bottom: 4px;
+        box-sizing: border-box;
     }
     html[data-theme="dark"] .bplib-upgrade {
         background: #474b58;
@@ -107,13 +126,13 @@
     }
 
     .bplib-upgrade .title {
-        grid-column: 1 / 3;
+        grid-column: 1 / 2;
         grid-row: 1 / 2;
         display: flex;
-        flex-direction: row-reverse;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: flex-start;
         color: #333;
+        overflow: hidden;
     }
     html[data-theme="dark"] .bplib-upgrade .title { color: #fff; }
 
@@ -125,24 +144,9 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    .bplib-upgrade .title .tier {
-        margin-right: 9px;
-        background: #49babe;
-        border-radius: 12px;
-        text-transform: uppercase;
-        color: #fff;
-        text-align: center;
-        font-weight: bold;
-        min-width: 50px;
-        padding: 3px 8px;
-        font-family: "GameFont", sans-serif;
-        font-size: 14px;
-        text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    }
 
     .bplib-upgrade .description {
-        grid-column: 3 / 4;
+        grid-column: 2 / 3;
         grid-row: 1 / 2;
         color: #aaa;
         font-size: 13px;
@@ -153,26 +157,44 @@
         gap: 10px;
     }
 
-    .bplib-upgrade .icon {
+    .bplib-upgrade .requirements {
         grid-column: 1 / 2;
         grid-row: 2 / 3;
         display: flex;
         align-items: center;
-        justify-content: center;
     }
 
-    .bplib-upgrade .requirements {
-        grid-column: 2 / 3;
-        grid-row: 2 / 3;
+    .bplib-upgrade .requirement {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .bplib-upgrade .requirement .shape {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: #2e3440;
         display: flex;
         align-items: center;
-        margin-left: 10px;
-        color: #aaa;
+        justify-content: center;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .bplib-upgrade .requirement .amount {
+        background: #55c767;
+        color: #ffffff;
         font-family: "GameFont", sans-serif;
+        font-size: 13px;
+        font-weight: bold;
+        padding: 2px 10px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
     }
 
     .bplib-upgrade .bplib-upgrade-actions {
-        grid-column: 3 / 4;
+        grid-column: 2 / 3;
         grid-row: 2 / 3;
         display: flex;
         align-items: center;
@@ -197,14 +219,109 @@
     #ingame_HUD_PinnedShapes {
         top: calc(210px * var(--ui-scale)) !important;
     }
+
+    /* --- PREVIEW DIALOG STYLES --- */
+    .dialogUpgrades .dialogInner .buttons {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 16px;
+    }
+    .bplib-preview-dialog-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .bplib-preview-canvas-container {
+        position: relative;
+        min-height: 360px;
+        flex: 1;
+        overflow: hidden;
+    }
+    .bplib-preview-canvas-container canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100% !important;
+        height: 100% !important;
+        display: block;
+    }
+    .bplib-preview-stats {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: "GameFont", sans-serif;
+        font-size: 13px;
+        color: #fff;
+    }
+    .bplib-preview-cost-slot {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .bplib-preview-cost-slot .requirements {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+    }
+    .bplib-preview-cost-slot .requirement {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .bplib-preview-cost-slot .shape {
+        width: 24px;
+        height: 24px;
+    }
+    .bplib-preview-cost-slot .amount {
+        padding: 1px 8px;
+        font-size: 12px;
+    }
+    .bplib-preview-locked-warning {
+        color: #ff9800;
+        font-family: "GameFont", sans-serif;
+        font-size: 13px;
+    }
+    .bplib-preview-recenter-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        pointer-events: auto;
+    }
+    .button.styledButton.disabled,
+    button.styledButton:disabled,
+    button.styledButton.disabled {
+        opacity: 0.4 !important;
+        cursor: not-allowed !important;
+    }
 `;
 
   // src/store.js
   var BlueprintStore = {
     mod: null,
-    init(mod) {
+    async init(mod, readFileAsync = null, listKeysAsync = null) {
+      if (!mod || typeof mod !== "object") return;
       this.mod = mod;
-      if (!Array.isArray(mod.settings.blueprints)) mod.settings.blueprints = [];
+      if (!mod.settings || typeof mod.settings !== "object") {
+        mod.settings = {};
+      }
+      if (!Array.isArray(mod.settings.blueprints)) {
+        mod.settings.blueprints = [];
+      }
+      if (!Array.isArray(mod.settings.deletedValues)) {
+        mod.settings.deletedValues = [];
+      }
+      if (!Array.isArray(mod.settings.deletedNames)) {
+        mod.settings.deletedNames = [];
+      }
+      const currentVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "";
+      if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
+        await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+        mod.settings.migrationVersion = currentVersion;
+      }
       if (typeof mod.settings.nextBlueprintId !== "number" || mod.settings.nextBlueprintId < 1) {
         mod.settings.nextBlueprintId = 1;
       }
@@ -228,11 +345,247 @@
           createdAt: typeof entry.createdAt === "number" ? entry.createdAt : Date.now()
         };
       }).filter(Boolean);
+      if (typeof mod.settings.lastSeenVersion !== "string") {
+        mod.settings.lastSeenVersion = "";
+      }
+      if (typeof mod.settings.skippedVersion !== "string") {
+        mod.settings.skippedVersion = "";
+      }
       const maxId = mod.settings.blueprints.reduce((max, b) => Math.max(max, b.id || 0), 0);
       if (mod.settings.nextBlueprintId <= maxId) {
         mod.settings.nextBlueprintId = maxId + 1;
       }
       this.persist();
+    },
+    _mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues = [], deletedNames = []) {
+      if (!bp || !bp.value && !bp.name) return false;
+      const dVals = Array.isArray(deletedValues) ? deletedValues : [];
+      const dNames = Array.isArray(deletedNames) ? deletedNames : [];
+      if (bp.value && dVals.includes(bp.value)) return false;
+      if (bp.name && dNames.includes(bp.name)) return false;
+      if (!existingValues.has(bp.value) && !existingNames.has(bp.name)) {
+        currentBlueprints.push(bp);
+        if (bp.value) existingValues.add(bp.value);
+        if (bp.name) existingNames.add(bp.name);
+        return true;
+      }
+      return false;
+    },
+    async migrateLegacySettings(mod, readFileAsync, listKeysAsync) {
+      const currentBlueprints = Array.isArray(mod.settings.blueprints) ? mod.settings.blueprints : [];
+      const existingValues = new Set(currentBlueprints.map((bp) => bp && bp.value).filter(Boolean));
+      const existingNames = new Set(currentBlueprints.map((bp) => bp && bp.name).filter(Boolean));
+      const deletedValues = Array.isArray(mod.settings.deletedValues) ? mod.settings.deletedValues : [];
+      const deletedNames = Array.isArray(mod.settings.deletedNames) ? mod.settings.deletedNames : [];
+      let migratedAny = false;
+      let reader = null;
+      if (typeof readFileAsync === "function") {
+        reader = readFileAsync;
+      } else if (typeof app !== "undefined" && app && app.storage && typeof app.storage.readFileAsync === "function") {
+        reader = (file) => app.storage.readFileAsync(file);
+      } else if (typeof window !== "undefined" && window.app && window.app.storage && typeof window.app.storage.readFileAsync === "function") {
+        reader = (file) => window.app.storage.readFileAsync(file);
+      }
+      let scanExecutedSuccessfully = false;
+      const scannedLegacyValues = /* @__PURE__ */ new Set();
+      const scannedLegacyNames = /* @__PURE__ */ new Set();
+      if (reader) {
+        try {
+          scanExecutedSuccessfully = true;
+          const candidateFiles = await this.getDynamicCandidateFiles(mod, listKeysAsync);
+          for (const file of candidateFiles) {
+            try {
+              const raw = await reader(file);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
+                  for (const bp of parsed.blueprints) {
+                    if (bp) {
+                      if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
+                      if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
+                    }
+                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                      migratedAny = true;
+                    }
+                  }
+                  if (Array.isArray(parsed.availableTags)) {
+                    mod.settings.availableTags = mod.settings.availableTags || [];
+                    parsed.availableTags.forEach((t) => {
+                      if (!mod.settings.availableTags.includes(t)) {
+                        mod.settings.availableTags.push(t);
+                      }
+                    });
+                  }
+                }
+              }
+            } catch (e) {
+              const errStr = e ? e.message || String(e) : "";
+              if (errStr !== "file_not_found") {
+                scanExecutedSuccessfully = false;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("[BlueprintBook] Migration read failure:", err);
+          scanExecutedSuccessfully = false;
+        }
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          const legacyKeys = [
+            "bplib_blueprints",
+            "blueprint_library_blueprints",
+            "blueprints",
+            "bp_library_settings"
+          ];
+          for (const key of legacyKeys) {
+            const item = localStorage.getItem(key);
+            if (item) {
+              try {
+                const parsed = JSON.parse(item);
+                const bps = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.blueprints) ? parsed.blueprints : null;
+                if (bps && bps.length > 0) {
+                  for (const bp of bps) {
+                    if (bp) {
+                      if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
+                      if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
+                    }
+                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                      migratedAny = true;
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn(`[BlueprintBook] Error parsing localStorage key "${key}":`, e);
+              }
+            }
+          }
+        }
+      } catch (e) {
+      }
+      if (migratedAny) {
+        mod.settings.blueprints = currentBlueprints;
+      }
+      if (scanExecutedSuccessfully) {
+        mod.settings.deletedValues = deletedValues.filter((v) => scannedLegacyValues.has(v));
+        mod.settings.deletedNames = deletedNames.filter((n) => scannedLegacyNames.has(n));
+      }
+    },
+    async getDynamicCandidateFiles(mod, listKeysAsync = null) {
+      const modId = mod && mod.meta && mod.meta.id ? mod.meta.id : "bp-library";
+      const currentVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "";
+      const currentFile = `modsettings_${modId}__${currentVersion}.json`;
+      const candidates = /* @__PURE__ */ new Set();
+      if (typeof listKeysAsync === "function") {
+        try {
+          const idbKeys = await listKeysAsync();
+          for (const key of idbKeys) {
+            if (typeof key === "string" && key !== currentFile) {
+              if (key.includes("modsettings") || key.includes("bp") || key.includes("blueprint") || key.includes("library")) {
+                candidates.add(key);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[BlueprintBook] Failed to list IndexedDB keys:", e);
+        }
+      }
+      const knownIds = Array.from(/* @__PURE__ */ new Set([
+        modId,
+        "bp-library",
+        "bp_library",
+        "BlueprintLibrary",
+        "blueprint_library",
+        "blueprint-library",
+        "BlueprintBook",
+        "bp-book",
+        "bp_book",
+        "blueprintbook"
+      ]));
+      const versionSet = /* @__PURE__ */ new Set();
+      if (currentVersion) {
+        const parts = currentVersion.split(".").map((n) => parseInt(n, 10));
+        if (parts.length >= 3 && !parts.some(isNaN)) {
+          const [major, minor, patch] = parts;
+          for (let p = patch - 1; p >= 0; p--) {
+            versionSet.add(`${major}.${minor}.${p}`);
+            versionSet.add(`${major}.${minor}`);
+          }
+          for (let m = minor - 1; m >= 0; m--) {
+            versionSet.add(`${major}.${m}.0`);
+            versionSet.add(`${major}.${m}`);
+          }
+          for (let maj = major - 1; maj >= 0; maj--) {
+            versionSet.add(`${maj}.0.0`);
+            versionSet.add(`${maj}.0`);
+          }
+        } else if (parts.length === 2 && !parts.some(isNaN)) {
+          const [major, minor] = parts;
+          for (let m = minor - 1; m >= 0; m--) {
+            versionSet.add(`${major}.${m}`);
+          }
+        }
+      }
+      ["1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach((v) => versionSet.add(v));
+      for (const id of knownIds) {
+        for (const ver of versionSet) {
+          const filename = `modsettings_${id}__${ver}.json`;
+          if (filename !== currentFile) {
+            candidates.add(filename);
+          }
+        }
+      }
+      return Array.from(candidates);
+    },
+    getLastSeenVersion() {
+      if (this.mod && this.mod.settings && typeof this.mod.settings.lastSeenVersion === "string" && this.mod.settings.lastSeenVersion) {
+        return this.mod.settings.lastSeenVersion;
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          return localStorage.getItem("bplib_last_seen_version") || "";
+        }
+      } catch (e) {
+      }
+      return "";
+    },
+    setLastSeenVersion(version) {
+      const v = String(version || "");
+      if (this.mod && this.mod.settings) {
+        this.mod.settings.lastSeenVersion = v;
+        this.persist();
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("bplib_last_seen_version", v);
+        }
+      } catch (e) {
+      }
+    },
+    getSkippedVersion() {
+      if (this.mod && this.mod.settings && typeof this.mod.settings.skippedVersion === "string" && this.mod.settings.skippedVersion) {
+        return this.mod.settings.skippedVersion;
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          return localStorage.getItem("bplib_skipped_version") || "";
+        }
+      } catch (e) {
+      }
+      return "";
+    },
+    setSkippedVersion(version) {
+      const v = String(version || "");
+      if (this.mod && this.mod.settings) {
+        this.mod.settings.skippedVersion = v;
+        this.persist();
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("bplib_skipped_version", v);
+        }
+      } catch (e) {
+      }
     },
     pruneTags() {
       const usedTags = /* @__PURE__ */ new Set();
@@ -248,6 +601,7 @@
       return this.mod.settings.availableTags;
     },
     ensureTags(tags) {
+      if (!Array.isArray(tags)) return;
       let changed = false;
       tags.forEach((t) => {
         if (!this.mod.settings.availableTags.includes(t)) {
@@ -260,15 +614,16 @@
     add(name, value, tags = []) {
       const cleanValue = String(value || "").replace(/\r\n/g, "\n").trim();
       const id = this.mod.settings.nextBlueprintId++;
+      const safeTags = Array.isArray(tags) ? tags : [];
       const entry = {
         id,
         name: name && name.trim() ? name.trim() : "Blueprint " + id,
         value: cleanValue,
-        tags,
+        tags: safeTags,
         createdAt: Date.now()
       };
       this.mod.settings.blueprints.push(entry);
-      this.ensureTags(tags);
+      this.ensureTags(safeTags);
       this.persist();
       return entry;
     },
@@ -293,6 +648,21 @@
     remove(id) {
       const idx = this.mod.settings.blueprints.findIndex((e) => e.id === id);
       if (idx === -1) return false;
+      const entry = this.mod.settings.blueprints[idx];
+      if (entry) {
+        if (!Array.isArray(this.mod.settings.deletedValues)) {
+          this.mod.settings.deletedValues = [];
+        }
+        if (!Array.isArray(this.mod.settings.deletedNames)) {
+          this.mod.settings.deletedNames = [];
+        }
+        if (entry.value && typeof entry.value === "string" && !this.mod.settings.deletedValues.includes(entry.value)) {
+          this.mod.settings.deletedValues.push(entry.value);
+        }
+        if (entry.name && typeof entry.name === "string" && !this.mod.settings.deletedNames.includes(entry.name)) {
+          this.mod.settings.deletedNames.push(entry.name);
+        }
+      }
       this.mod.settings.blueprints.splice(idx, 1);
       this.pruneTags();
       this.persist();
@@ -300,9 +670,9 @@
     },
     persist() {
       try {
-        if (this.mod.saveSettings) this.mod.saveSettings();
+        if (this.mod && this.mod.saveSettings) this.mod.saveSettings();
       } catch (err) {
-        console.error("[bp-book] Failed to save settings", err);
+        console.error("[BlueprintBook] Failed to save settings:", err);
       }
     }
   };
@@ -317,7 +687,11 @@
         if (title) {
           button.title = title;
         }
-        this.element.appendChild(button);
+        if (this.saveButton) {
+          this.element.insertBefore(button, this.saveButton);
+        } else {
+          this.element.appendChild(button);
+        }
         this.element.style.gridTemplateColumns = `repeat(${this.element.children.length}, 1fr)`;
         this.trackClicks(button, () => {
           try {
@@ -335,18 +709,19 @@
         $old.createElements.call(this, parent);
         const mapper = this.root.keyMapper;
         const k = shapez.KEYMAPPINGS;
+        const isUnlocked = () => !this.root.hubGoals || typeof this.root.hubGoals.isRewardUnlocked === "function" && this.root.hubGoals.isRewardUnlocked(shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints");
         const customBindings = [
           {
             // [SELECTION ACTIVE] Save selected area to Blueprint Book
             label: "Save to Book",
             keys: [k?.massSelect?.massSelectStart || 17, "+", 80],
-            condition: () => this.anythingSelectedOnMap
+            condition: () => this.anythingSelectedOnMap && isUnlocked()
           },
           {
             // Open / Toggle Blueprint Book when not placing a blueprint
             label: "Blueprint Book",
             keys: [80],
-            condition: () => !this.blueprintPlacementActive
+            condition: () => !this.blueprintPlacementActive && isUnlocked()
           }
         ];
         for (let i = 0; i < customBindings.length; ++i) {
@@ -454,8 +829,435 @@
     return { updateAvailable: false };
   }
 
+  // src/preview.js
+  function resolveBpStringMod(root) {
+    const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
+    if (!gShapez || !root) return null;
+    const modLoader = gShapez.BlueprintLibraryModLoader;
+    if (!modLoader || !Array.isArray(modLoader.mods)) return null;
+    return modLoader.mods.find((m) => m.metadata?.id === "bp-string") || null;
+  }
+  function deserializeBlueprintEntities(root, blueprintInput) {
+    if (!blueprintInput) return null;
+    if (Array.isArray(blueprintInput)) return blueprintInput;
+    const bpMod = resolveBpStringMod(root);
+    if (!bpMod) return null;
+    try {
+      return bpMod.constructor.deserialize(root, blueprintInput) || null;
+    } catch {
+      return null;
+    }
+  }
+  function getBlueprintEntityCount(root, blueprintInput) {
+    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    return entities ? entities.length : 0;
+  }
+  function getBlueprintCost(root, blueprintInput) {
+    if (!root) return null;
+    if (root.gameMode && typeof root.gameMode.getHasFreeCopyPaste === "function" && root.gameMode.getHasFreeCopyPaste()) {
+      return 0;
+    }
+    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    if (!entities) return null;
+    try {
+      const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
+      if (!gShapez || !gShapez.Blueprint) return null;
+      const bp = new gShapez.Blueprint(entities);
+      return typeof bp.getCost === "function" ? bp.getCost() : null;
+    } catch {
+      return null;
+    }
+  }
+  var InteractiveBlueprintViewer = class {
+    constructor(root, blueprintInput, containerElem) {
+      this.root = root;
+      this.blueprintInput = blueprintInput;
+      this.containerElem = containerElem;
+      this.canvas = document.createElement("canvas");
+      if (this.containerElem) {
+        this.containerElem.appendChild(this.canvas);
+      }
+      this.ctx = this.canvas.getContext("2d");
+      this.entities = [];
+      this.bounds = { minX: 0, minY: 0, tilesW: 1, tilesH: 1 };
+      this.panX = 0;
+      this.panY = 0;
+      this.zoom = 1;
+      this.baseScale = 1;
+      this.initEntities();
+      this.setupEvents();
+      this.resize();
+      this.recenter();
+    }
+    initEntities() {
+      if (!this.root) return;
+      try {
+        this.entities = deserializeBlueprintEntities(this.root, this.blueprintInput) || [];
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (let i = 0; i < this.entities.length; ++i) {
+          const staticComp = this.entities[i]?.components?.StaticMapEntity;
+          if (!staticComp) continue;
+          const b = staticComp.getTileSpaceBounds();
+          if (!b || !Number.isFinite(b.x) || !Number.isFinite(b.y)) continue;
+          const bw = typeof b.w === "number" ? b.w : typeof b.width === "number" ? b.width : 1;
+          const bh = typeof b.h === "number" ? b.h : typeof b.height === "number" ? b.height : 1;
+          minX = Math.min(minX, b.x);
+          minY = Math.min(minY, b.y);
+          maxX = Math.max(maxX, b.x + bw);
+          maxY = Math.max(maxY, b.y + bh);
+        }
+        if (minX !== Infinity) {
+          this.bounds = {
+            minX,
+            minY,
+            tilesW: Math.max(1, maxX - minX),
+            tilesH: Math.max(1, maxY - minY)
+          };
+        }
+      } catch (err) {
+        console.error("[BlueprintBook] Error deserializing for viewer:", err);
+      }
+    }
+    resize() {
+      const rect = this.containerElem ? this.containerElem.getBoundingClientRect() : { width: 0, height: 0 };
+      const clientW = this.containerElem ? this.containerElem.clientWidth || rect.width : rect.width;
+      const clientH = this.containerElem ? this.containerElem.clientHeight || rect.height : rect.height;
+      const newW = Math.max(300, Math.floor(clientW || 580));
+      const newH = Math.max(200, Math.floor(clientH || 380));
+      if (this.canvas.width !== newW || this.canvas.height !== newH) {
+        this.canvas.width = newW;
+        this.canvas.height = newH;
+      }
+      const tileSizePx = 32;
+      const availableW = Math.max(1, this.canvas.width - 40);
+      const availableH = Math.max(1, this.canvas.height - 40);
+      this.baseScale = Math.min(
+        availableW / (this.bounds.tilesW * tileSizePx),
+        availableH / (this.bounds.tilesH * tileSizePx)
+      );
+      this.render();
+    }
+    recenter() {
+      this.resize();
+      this.zoom = 1;
+      const tileSizePx = 32;
+      const totalW = this.bounds.tilesW * tileSizePx * this.baseScale;
+      const totalH = this.bounds.tilesH * tileSizePx * this.baseScale;
+      this.panX = (this.canvas.width - totalW) / 2;
+      this.panY = (this.canvas.height - totalH) / 2;
+      this.render();
+    }
+    setupEvents() {
+      this.canvas.style.pointerEvents = "auto";
+      this.canvas.style.cursor = "grab";
+      this.canvas.style.touchAction = "none";
+      this.canvas.style.userSelect = "none";
+      this.onPointerDown = (e) => {
+        e.stopPropagation();
+        if (e.target && typeof e.target.setPointerCapture === "function") {
+          try {
+            e.target.setPointerCapture(e.pointerId);
+          } catch (err) {
+          }
+        }
+        this.isDragging = true;
+        this.dragStartX = e.clientX - this.panX;
+        this.dragStartY = e.clientY - this.panY;
+        this.canvas.style.cursor = "grabbing";
+      };
+      this.onPointerMove = (e) => {
+        if (!this.isDragging) return;
+        e.stopPropagation();
+        this.panX = e.clientX - this.dragStartX;
+        this.panY = e.clientY - this.dragStartY;
+        this.render();
+      };
+      this.onPointerUp = (e) => {
+        if (!this.isDragging) return;
+        this.isDragging = false;
+        if (e.target && typeof e.target.releasePointerCapture === "function") {
+          try {
+            e.target.releasePointerCapture(e.pointerId);
+          } catch (err) {
+          }
+        }
+        this.canvas.style.cursor = "grab";
+      };
+      this.onWheel = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+        const newZoom = Math.min(10, Math.max(0.02, this.zoom * zoomFactor));
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1;
+        const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1;
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
+        this.panX = mouseX - (mouseX - this.panX) * (newZoom / this.zoom);
+        this.panY = mouseY - (mouseY - this.panY) * (newZoom / this.zoom);
+        this.zoom = newZoom;
+        this.render();
+      };
+      this.canvas.addEventListener("pointerdown", this.onPointerDown);
+      window.addEventListener("pointermove", this.onPointerMove);
+      window.addEventListener("pointerup", this.onPointerUp);
+      this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+      if (typeof window !== "undefined" && window.ResizeObserver && this.containerElem) {
+        let lastW = 0;
+        let lastH = 0;
+        this.resizeObserver = new ResizeObserver((entries) => {
+          const entryList = Array.isArray(entries) ? entries : entries ? [entries] : [];
+          if (entryList.length === 0) {
+            this.resize();
+            return;
+          }
+          for (const entry of entryList) {
+            const w = Math.floor(entry?.contentRect?.width || 0);
+            const h = Math.floor(entry?.contentRect?.height || 0);
+            if (w > 0 && h > 0 && (Math.abs(w - lastW) > 5 || Math.abs(h - lastH) > 5)) {
+              lastW = w;
+              lastH = h;
+              this.resize();
+            }
+          }
+        });
+        this.resizeObserver.observe(this.containerElem);
+      }
+    }
+    cleanup() {
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+        this.resizeObserver = null;
+      }
+      this.canvas.removeEventListener("pointerdown", this.onPointerDown);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pointermove", this.onPointerMove);
+        window.removeEventListener("pointerup", this.onPointerUp);
+      }
+      this.canvas.removeEventListener("wheel", this.onWheel);
+      if (this.canvas && this.canvas.parentNode) {
+        this.canvas.parentNode.removeChild(this.canvas);
+      }
+    }
+    render() {
+      if (!this.ctx) return;
+      const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
+      if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector) return;
+      const w = this.canvas.width;
+      const h = this.canvas.height;
+      const mapBgColor = gShapez.THEMES && gShapez.THEMES.dark && gShapez.THEMES.dark.map && gShapez.THEMES.dark.map.background || "#1c2333";
+      this.ctx.fillStyle = mapBgColor;
+      this.ctx.fillRect(0, 0, w, h);
+      if (!this.entities || this.entities.length === 0) return;
+      this.ctx.save();
+      this.ctx.translate(this.panX, this.panY);
+      const currentScale = this.baseScale * this.zoom;
+      this.ctx.scale(currentScale, currentScale);
+      const parameters = new gShapez.DrawParameters({
+        context: this.ctx,
+        visibleRect: new gShapez.Rectangle(-1e4, -1e4, 2e4, 2e4),
+        desiredAtlasScale: gShapez.ORIGINAL_SPRITE_SCALE || "0.75",
+        zoomLevel: currentScale,
+        root: this.root
+      });
+      const minVector = new gShapez.Vector(this.bounds.minX, this.bounds.minY);
+      for (let i = 0; i < this.entities.length; ++i) {
+        const staticComp = this.entities[i]?.components?.StaticMapEntity;
+        if (!staticComp) continue;
+        if (!staticComp.origin || typeof staticComp.origin.sub !== "function") continue;
+        const relativeOrigin = staticComp.origin.sub(minVector);
+        const meta = typeof staticComp.getMetaBuilding === "function" ? staticComp.getMetaBuilding() : null;
+        const rotationVariant = typeof staticComp.getRotationVariant === "function" ? staticComp.getRotationVariant() : 0;
+        const sprite = typeof staticComp.getSprite === "function" && staticComp.getSprite() || meta && typeof meta.getPreviewSprite === "function" && meta.getPreviewSprite(rotationVariant, staticComp.getVariant ? staticComp.getVariant() : void 0) || typeof staticComp.getBlueprintSprite === "function" && staticComp.getBlueprintSprite();
+        if (sprite && typeof staticComp.drawSpriteOnBoundsClipped === "function") {
+          staticComp.drawSpriteOnBoundsClipped(parameters, sprite, 0, relativeOrigin);
+        }
+      }
+      this.ctx.restore();
+    }
+  };
+  function renderBlueprintCostElement(root, cost, iconSize = 30) {
+    const container = document.createElement("div");
+    container.className = "requirements";
+    if (cost === null || cost === void 0) {
+      return container;
+    }
+    const req = document.createElement("div");
+    req.className = "requirement";
+    const shapeDiv = document.createElement("div");
+    shapeDiv.className = "shape";
+    if (root && root.shapeDefinitionMgr && root.gameMode) {
+      try {
+        const shapeKey = typeof root.gameMode.getBlueprintShapeKey === "function" ? root.gameMode.getBlueprintShapeKey() : "CuCuCuCu";
+        const costShape = root.shapeDefinitionMgr.getShapeFromShortKey(shapeKey);
+        if (costShape && typeof costShape.generateAsCanvas === "function") {
+          const canvas = costShape.generateAsCanvas(iconSize);
+          shapeDiv.appendChild(canvas);
+        }
+      } catch (e) {
+      }
+    }
+    const amountDiv = document.createElement("div");
+    amountDiv.className = "amount";
+    amountDiv.textContent = `${cost}`;
+    req.appendChild(shapeDiv);
+    req.appendChild(amountDiv);
+    container.appendChild(req);
+    return container;
+  }
+  function openBlueprintPreviewDialog(root, blueprint, onEquip) {
+    const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
+    if (!gShapez || !root || !blueprint) return;
+    const entities = deserializeBlueprintEntities(root, blueprint.value || blueprint);
+    const entityCount = getBlueprintEntityCount(root, entities);
+    const cost = getBlueprintCost(root, entities);
+    const previewHtml = `
+        <div class="bplib-preview-dialog-content">
+            <div class="bplib-preview-canvas-container">
+                <button class="button styledButton bplib-preview-recenter-btn">Recenter</button>
+            </div>
+            <div class="bplib-preview-footer">
+                <div class="bplib-preview-stats">
+                    <div class="stat-item"><span class="label">Buildings:</span> <strong>${entityCount}</strong></div>
+                    <div class="stat-item bplib-preview-cost-slot"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    if (gShapez.T && gShapez.T.dialogs && gShapez.T.dialogs.buttons) {
+      gShapez.T.dialogs.buttons.equip = "EQUIP";
+    }
+    let viewer = null;
+    const dialog = new gShapez.Dialog({
+      app: root.app,
+      title: blueprint.name || "Blueprint Preview",
+      contentHTML: previewHtml,
+      buttons: ["cancel:bad", "equip:good"]
+    });
+    if (dialog.buttonSignals && dialog.buttonSignals.equip) {
+      dialog.buttonSignals.equip.add(() => {
+        if (viewer) {
+          try {
+            viewer.cleanup();
+          } catch (e) {
+          }
+        }
+        if (typeof onEquip === "function") onEquip();
+      });
+    }
+    if (root.hud && root.hud.parts && root.hud.parts.dialogs) {
+      root.hud.parts.dialogs.internalShowDialog(dialog);
+    }
+    if (dialog.dialogElem) {
+      dialog.dialogElem.classList.add("dialogUpgrades");
+    }
+    if (dialog.element) {
+      const buttons = dialog.element.querySelectorAll(".buttons button, .button.good");
+      buttons.forEach((btn) => {
+        if (btn.classList.contains("good") || btn.dataset.button === "equip" || btn.textContent.includes("UNDEFINED")) {
+          btn.textContent = "EQUIP";
+        }
+      });
+    }
+    if (dialog.element) {
+      const buttonsDiv = dialog.element.querySelector(".buttons");
+      const statsElem = dialog.element.querySelector(".bplib-preview-stats");
+      if (buttonsDiv && statsElem && statsElem.parentNode !== buttonsDiv) {
+        buttonsDiv.insertBefore(statsElem, buttonsDiv.firstChild);
+      }
+      const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
+      if (costSlot && cost !== null && cost !== void 0) {
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "label bplib-preview-cost-label";
+        labelSpan.textContent = "Cost:";
+        costSlot.appendChild(labelSpan);
+        const costElem = renderBlueprintCostElement(root, cost, 24);
+        costSlot.appendChild(costElem);
+      }
+      const lockedEntities = getLockedEntitiesInBlueprint(root, entities || blueprint);
+      if (lockedEntities.length > 0) {
+        const statsContainer = dialog.element.querySelector(".bplib-preview-stats");
+        if (statsContainer) {
+          const warningElem = document.createElement("span");
+          warningElem.className = "bplib-preview-locked-warning";
+          warningElem.textContent = "\u26A0\uFE0F Contains locked buildings";
+          statsContainer.appendChild(warningElem);
+        }
+        const equipBtn = Array.from(dialog.element.querySelectorAll(".buttons button, .button.good, button")).find(
+          (btn) => btn.classList.contains("good") || btn.dataset.button === "equip" || btn.textContent.trim() === "EQUIP"
+        );
+        if (equipBtn) {
+          equipBtn.disabled = true;
+          equipBtn.classList.add("disabled");
+          equipBtn.title = "Contains locked buildings (unlocked at higher level)";
+        }
+      }
+    }
+    const liveContainer = dialog.element.querySelector(".bplib-preview-canvas-container");
+    if (liveContainer) {
+      viewer = new InteractiveBlueprintViewer(root, entities || blueprint.value, liveContainer);
+      if (typeof window !== "undefined" && window.requestAnimationFrame) {
+        window.requestAnimationFrame(() => {
+          viewer.resize();
+          viewer.recenter();
+        });
+      }
+      const recenterBtn = dialog.element.querySelector(".bplib-preview-recenter-btn");
+      if (recenterBtn) {
+        if (typeof dialog.trackClicks === "function") {
+          dialog.trackClicks(recenterBtn, () => viewer.recenter());
+        } else {
+          recenterBtn.addEventListener("click", () => viewer.recenter());
+        }
+      }
+      dialog.closeRequested.add(() => {
+        try {
+          viewer.cleanup();
+        } catch (e) {
+        }
+      });
+    }
+  }
+  function getLockedEntitiesInBlueprint(root, blueprintInput) {
+    const input = blueprintInput && typeof blueprintInput === "object" && !Array.isArray(blueprintInput) && blueprintInput.value ? blueprintInput.value : blueprintInput;
+    const entities = deserializeBlueprintEntities(root, input);
+    if (!entities || !Array.isArray(entities)) return [];
+    const locked = [];
+    for (let i = 0; i < entities.length; ++i) {
+      const entity = entities[i];
+      const staticComp = entity?.components?.StaticMapEntity;
+      if (!staticComp) continue;
+      const metaBuilding = typeof staticComp.getMetaBuilding === "function" ? staticComp.getMetaBuilding() : null;
+      if (!metaBuilding) continue;
+      const isUnlocked = typeof metaBuilding.getIsUnlocked === "function" ? metaBuilding.getIsUnlocked(root) : true;
+      const variant = typeof staticComp.getVariant === "function" ? staticComp.getVariant() : staticComp.variant || "default";
+      const availableVariants = typeof metaBuilding.getAvailableVariants === "function" ? metaBuilding.getAvailableVariants(root) : [variant];
+      const isVariantUnlocked = Array.isArray(availableVariants) && availableVariants.includes(variant);
+      if (!isUnlocked || !isVariantUnlocked) {
+        locked.push(entity);
+      }
+    }
+    return locked;
+  }
+
   // src/changelog.js
   var MOD_CHANGELOG = [
+    {
+      version: "1.0.2",
+      date: "2026-07-24",
+      entries: [
+        "<strong>HUD Placement</strong>: Moved Blueprint Book icon to the 3rd slot in the in-game menu.",
+        "<strong>Level 12 Reward Gate</strong>: Blueprint Book functionality is now gated behind the level 12 blueprint reward unlock, matching native blueprint rules.",
+        "<strong>Blueprint Preview</strong>: Blueprint Book cards now show an interactive canvas preview of the blueprint with zoom, pan, and recenter controls.",
+        "<strong>Blueprint Cost</strong>: Blueprint Book cards and preview dialogs now show the cost of the blueprint.",
+        "<strong>Resurfacing Blueprints Fix</strong>: Fixed migration version tracking so deleted blueprints do not resurface on reload.",
+        "<strong>Blueprint Equip ('V' Key) Fix</strong>: Fixed equipping blueprints so 'V' ('Paste Last Blueprint') accurately places equipped blueprints without clipboard issues.",
+        "<strong>Preview Canvas & Controls Fix</strong>: Fixed bounds calculations, min-zoom scaling (0.02 limit), Recenter button placement, and belt corner rendering.",
+        "<strong>Unlock Progression Gating</strong>: EQUIP buttons are now disabled for blueprints containing locked buildings/variants based on player level progression.",
+        "<strong>Welcome Dialog Fix</strong>: Fixed an issue where the welcome popup re-appeared on every save load.",
+        "<strong>Library Scrolling Fix</strong>: Fixed scrolling and mouse wheel interaction inside the blueprint book window."
+      ]
+    },
     {
       version: "1.0.1",
       date: "2026-07-21",
@@ -472,6 +1274,7 @@
     const entry = MOD_CHANGELOG.find((item) => item.version.replace(/^v/i, "").trim() === cleanVer);
     return entry ? entry.entries : [];
   }
+  var RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
   var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
   // src/ui.js
@@ -487,11 +1290,32 @@
       if (!shapez.CHANGELOG.some((item) => item.version === id)) {
         shapez.CHANGELOG.unshift({
           version: id,
-          date: "2026-07-21",
+          date: MOD_CHANGELOG[0] && MOD_CHANGELOG[0].date || "2026-07-24",
           entries: MOD_CHANGELOG[0].entries
         });
       }
     }
+  }
+  function getLockedEntitiesInBlueprint2(root, entities) {
+    if (!entities || !Array.isArray(entities) || !root) return [];
+    const locked = [];
+    for (let i = 0; i < entities.length; i++) {
+      const entity = entities[i];
+      const staticComp = entity.components?.StaticMapEntity;
+      const meta = staticComp?.getMetaBuilding ? staticComp.getMetaBuilding() : null;
+      if (meta) {
+        let unlocked = true;
+        if (root.hubGoals && typeof root.hubGoals.isBuildingUnlocked === "function") {
+          unlocked = root.hubGoals.isBuildingUnlocked(meta);
+        } else if (typeof meta.getIsUnlocked === "function") {
+          unlocked = meta.getIsUnlocked(root);
+        }
+        if (!unlocked) {
+          locked.push(entity);
+        }
+      }
+    }
+    return locked;
   }
   var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
     createElements(parent) {
@@ -501,11 +1325,19 @@
     }
     bindEvents() {
       const searchInput = this.overlay.querySelector("#bplib-search");
-      searchInput.onpointerdown = () => searchInput.focus();
-      searchInput.addEventListener("input", (e) => {
-        this.searchQuery = e.target.value.toLowerCase();
-        this.render();
-      });
+      if (searchInput) {
+        searchInput.onpointerdown = () => searchInput.focus();
+        searchInput.addEventListener("input", (e) => {
+          this.searchQuery = e.target.value.toLowerCase();
+          this.render();
+        });
+      }
+      const grid = this.overlay.querySelector("#bplib-grid");
+      if (grid) {
+        grid.addEventListener("wheel", (e) => {
+          e.stopPropagation();
+        }, { passive: true });
+      }
       this.dialog.trackClicks(this.overlay.querySelector("#bplib-btn-import"), () => {
         this.openImportDialog();
       });
@@ -533,14 +1365,16 @@
         closeButton: false
       });
       this.root.hud.parts.dialogs.internalShowDialog(dialog);
-      dialog.buttonSignals.ok.add(() => {
-        const name = nameInput.getValue() || "New Blueprint";
-        const str = stringInput.getValue();
-        const tagsStr = tagsInput.getValue();
-        if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
-        const newTags = tagsStr.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-        onSubmit(name, str, newTags);
-      });
+      if (dialog.buttonSignals && dialog.buttonSignals.ok) {
+        dialog.buttonSignals.ok.add(() => {
+          const name = nameInput.getValue() || "New Blueprint";
+          const str = stringInput.getValue();
+          const tagsStr = tagsInput.getValue();
+          if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
+          const newTags = tagsStr.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+          onSubmit(name, str, newTags);
+        });
+      }
     }
     openImportDialog(initialString = "") {
       this._showBlueprintFormDialog({
@@ -560,12 +1394,16 @@
     cleanupDynamicClickDetectors() {
       if (this.dynamicClickDetectors) {
         for (const d of this.dynamicClickDetectors) {
-          d.cleanup();
-          const index = this.clickDetectors.indexOf(d);
-          if (index >= 0) this.clickDetectors.splice(index, 1);
+          if (d && typeof d.cleanup === "function") {
+            d.cleanup();
+          }
+          if (this.clickDetectors) {
+            const index = this.clickDetectors.indexOf(d);
+            if (index >= 0) this.clickDetectors.splice(index, 1);
+          }
         }
+        this.dynamicClickDetectors = [];
       }
-      this.dynamicClickDetectors = [];
     }
     trackDynamicClick(element, handler) {
       if (!this.dynamicClickDetectors) this.dynamicClickDetectors = [];
@@ -583,26 +1421,16 @@
       if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
       _HUDBlueprintLibrary.hasCheckedUpdate = true;
       const currentVersion = METADATA.version;
-      const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
-      const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
+      const lastSeenVersion = BlueprintStore.getLastSeenVersion();
+      const skippedVersion = BlueprintStore.getSkippedVersion();
       try {
         const update = await checkForUpdates(currentVersion);
         if (update.updateAvailable && update.latestVersion !== skippedVersion) {
           this.showUpdateDialog(update);
-          try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_last_seen_version", currentVersion);
-            }
-          } catch (e) {
-          }
+          BlueprintStore.setLastSeenVersion(currentVersion);
         } else if (lastSeenVersion !== currentVersion) {
           this.showWelcomeDialog(currentVersion);
-          try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_last_seen_version", currentVersion);
-            }
-          } catch (e) {
-          }
+          BlueprintStore.setLastSeenVersion(currentVersion);
         }
       } catch (err) {
         console.error("[BlueprintBook] Update check failed:", err);
@@ -664,9 +1492,7 @@
       if (dialog.buttonSignals.skipVersion) {
         dialog.buttonSignals.skipVersion.add(() => {
           try {
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("bplib_skipped_version", latestVersion);
-            }
+            BlueprintStore.setSkippedVersion(latestVersion);
           } catch (e) {
             console.error("[BlueprintBook] Failed to save skipped version:", e);
           }
@@ -685,8 +1511,27 @@
         });
       }
     }
+    isBlueprintsUnlocked() {
+      if (this.root && this.root.hubGoals && typeof this.root.hubGoals.isRewardUnlocked === "function") {
+        const reward = shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints";
+        return this.root.hubGoals.isRewardUnlocked(reward);
+      }
+      return true;
+    }
+    showBlueprintsNotUnlocked() {
+      if (this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
+        const dialogsT = shapez && shapez.T && shapez.T.dialogs && shapez.T.dialogs.blueprintsNotUnlocked;
+        const title = dialogsT && dialogsT.title || "Blueprints Locked";
+        const desc = dialogsT && dialogsT.desc || "Unlocks at level 12!";
+        this.root.hud.parts.dialogs.showInfo(title, desc);
+      }
+    }
     handleSaveHotkey() {
       if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
+      if (!this.isBlueprintsUnlocked()) {
+        this.showBlueprintsNotUnlocked();
+        return "stop_propagation";
+      }
       const selectedUids = this.root.hud.parts.massSelector.selectedUids;
       if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
       const bpMod = shapez.BlueprintLibraryModLoader.mods.find((m) => m.metadata.id === "bp-string");
@@ -706,13 +1551,18 @@
     }
     cleanup() {
       super.cleanup();
-      if (this.dialog) {
-        this.dialog.closeRequested.dispatch();
-      }
+      this.cleanupDynamicClickDetectors();
+      this.visible = false;
+      this.dialog = null;
+      this.overlay = null;
     }
     show() {
       try {
         if (this.dialog) return;
+        if (!this.isBlueprintsUnlocked()) {
+          this.showBlueprintsNotUnlocked();
+          return;
+        }
         this.dialog = new shapez.Dialog({
           app: this.root.app,
           title: "Blueprint Book",
@@ -731,7 +1581,7 @@
           closeButton: true
         });
         this.root.hud.parts.dialogs.internalShowDialog(this.dialog);
-        this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog");
+        this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog", "dialogUpgrades");
         this.visible = true;
         this.overlay = this.dialog.element || document.querySelector(".ingameDialog:last-child");
         this.bindEvents();
@@ -748,24 +1598,59 @@
       }
     }
     close() {
-      if (this.dialog) {
-        this.dialog.closeRequested.dispatch();
+      if (this.dialog && this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
+        this.root.hud.parts.dialogs.closeDialog(this.dialog);
       }
+      this.cleanup();
     }
     notify(message, type) {
       if (this.root && this.root.hud && this.root.hud.signals && this.root.hud.signals.notification) {
         this.root.hud.signals.notification.dispatch(message, type || NOTIFY.info);
       }
     }
-    equipBlueprint(blueprintString) {
+    async equipBlueprint(blueprintString) {
+      if (!this.isBlueprintsUnlocked()) {
+        this.showBlueprintsNotUnlocked();
+        return;
+      }
       try {
         const modLoader = shapez.BlueprintLibraryModLoader;
         const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");
         const entities = bpMod.constructor.deserialize(this.root, blueprintString);
         if (entities) {
+          const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
+          if (lockedEntities && lockedEntities.length > 0) {
+            const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
+            const warningType = shapez && shapez.enumNotificationType && shapez.enumNotificationType.warning || NOTIFY.warning;
+            if (this.root.hud?.parts?.notifications?.sendNotification) {
+              this.root.hud.parts.notifications.sendNotification(warningMsg, warningType);
+            } else {
+              this.notify(warningMsg, warningType);
+            }
+            return;
+          }
           const blueprint = new shapez.Blueprint(entities);
-          this.root.hud.parts.blueprintPlacer.currentBlueprint.set(blueprint);
-          this.root.hud.signals.pasteBlueprintRequested.dispatch();
+          if (this.root.hud?.parts?.blueprintPlacer) {
+            this.root.hud.parts.blueprintPlacer.lastBlueprintUsed = blueprint;
+            if (this.root.hud.parts.blueprintPlacer.currentBlueprint?.set) {
+              this.root.hud.parts.blueprintPlacer.currentBlueprint.set(blueprint);
+            }
+          }
+          try {
+            if (navigator?.clipboard?.writeText) {
+              await navigator.clipboard.writeText(blueprintString);
+            }
+          } catch (e) {
+            console.warn("[BlueprintBook] Clipboard write failed:", e);
+          }
+          if (this.root.keymapper?.emit) {
+            this.root.keymapper.emit("pasteBlueprintRequested");
+          } else if (this.root.keyMapper?.emit) {
+            this.root.keyMapper.emit("pasteBlueprintRequested");
+          }
+          if (this.root.hud?.signals?.pasteBlueprintRequested) {
+            this.root.hud.signals.pasteBlueprintRequested.dispatch();
+          }
           this.notify("Blueprint equipped!", NOTIFY.success);
           this.close();
         } else {
@@ -810,51 +1695,63 @@
     }
     _createBlueprintCard(bp, trackClick) {
       const card = document.createElement("div");
-      card.className = "bplib-upgrade";
+      card.className = "bplib-upgrade shopCard";
       const titleDiv = document.createElement("div");
       titleDiv.className = "title";
       const nameDiv = document.createElement("div");
       nameDiv.className = "name";
-      nameDiv.innerText = bp.name;
-      const tierDiv = document.createElement("div");
-      tierDiv.className = "tier";
-      tierDiv.innerText = "BP";
+      nameDiv.textContent = bp.name || "Untitled";
       titleDiv.appendChild(nameDiv);
-      titleDiv.appendChild(tierDiv);
       const descDiv = document.createElement("div");
       descDiv.className = "description";
-      descDiv.innerText = `Tags: ${(bp.tags || []).join(", ") || "None"}`;
+      descDiv.textContent = `Tags: ${(bp.tags || []).join(", ") || "None"}`;
       const delBtn = document.createElement("button");
       delBtn.className = "bplib-action-delete";
       delBtn.title = "Delete Blueprint";
-      delBtn.innerText = "X";
+      delBtn.textContent = "X";
       trackClick(delBtn, () => {
         this.deleteBlueprint(bp);
       });
       descDiv.appendChild(delBtn);
-      const iconDiv = document.createElement("div");
-      iconDiv.className = "icon";
       const reqDiv = document.createElement("div");
       reqDiv.className = "requirements";
+      const entities = deserializeBlueprintEntities(this.root, bp.value);
+      const cost = getBlueprintCost(this.root, entities);
+      if (cost !== null && cost !== void 0) {
+        const costElem = renderBlueprintCostElement(this.root, cost, 24);
+        reqDiv.appendChild(costElem);
+      }
       const actionsDiv = document.createElement("div");
       actionsDiv.className = "bplib-upgrade-actions";
+      const previewBtn = document.createElement("button");
+      previewBtn.className = "button styledButton bplib-btn-preview";
+      previewBtn.textContent = "PREVIEW";
+      trackClick(previewBtn, () => {
+        openBlueprintPreviewDialog(this.root, bp, () => this.equipBlueprint(bp.value));
+      });
       const equipBtn = document.createElement("button");
       equipBtn.className = "button styledButton good bplib-btn-equip";
-      equipBtn.innerText = "EQUIP";
+      equipBtn.textContent = "EQUIP";
       trackClick(equipBtn, () => {
         this.equipBlueprint(bp.value);
       });
+      const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
+      if (lockedEntities && lockedEntities.length > 0) {
+        equipBtn.classList.add("disabled");
+        equipBtn.disabled = true;
+        equipBtn.title = "Contains locked buildings (unlocked at higher level)";
+      }
       const editBtn = document.createElement("button");
       editBtn.className = "button styledButton bplib-btn-edit";
-      editBtn.innerText = "EDIT";
+      editBtn.textContent = "EDIT";
       trackClick(editBtn, () => {
         this.editBlueprint(bp);
       });
+      actionsDiv.appendChild(previewBtn);
       actionsDiv.appendChild(equipBtn);
       actionsDiv.appendChild(editBtn);
       card.appendChild(titleDiv);
       card.appendChild(descDiv);
-      card.appendChild(iconDiv);
       card.appendChild(reqDiv);
       card.appendChild(actionsDiv);
       return card;
@@ -918,9 +1815,69 @@
 
   // src/index.js
   var BlueprintLibraryMod = class extends shapez.Mod {
-    init() {
+    async init() {
       shapez.BlueprintLibraryModLoader = this.modLoader;
-      BlueprintStore.init(this);
+      let readFileAsync = null;
+      let listKeysAsync = null;
+      try {
+        const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
+        let idbStorage = null;
+        let electronStorage = null;
+        if (shapez.StorageImplBrowserIndexedDB) {
+          try {
+            idbStorage = new shapez.StorageImplBrowserIndexedDB(this.app);
+            await idbStorage.initialize();
+          } catch (e) {
+            console.warn("[BlueprintBook] IDB storage init failed:", e);
+          }
+        }
+        if (shapez.StorageImplElectron) {
+          try {
+            electronStorage = new shapez.StorageImplElectron(this.app);
+            await electronStorage.initialize();
+          } catch (e) {
+            console.warn("[BlueprintBook] Electron storage init failed:", e);
+          }
+        }
+        const mainStorage = isStandalone && electronStorage ? electronStorage : idbStorage || electronStorage;
+        readFileAsync = async (filename) => {
+          if (mainStorage) {
+            try {
+              const res = await mainStorage.readFileAsync(filename);
+              if (res) return res;
+            } catch (e) {
+            }
+          }
+          const fallbackStorage = mainStorage === idbStorage ? electronStorage : idbStorage;
+          if (fallbackStorage) {
+            try {
+              const res = await fallbackStorage.readFileAsync(filename);
+              if (res) return res;
+            } catch (e) {
+            }
+          }
+          throw new Error("file_not_found");
+        };
+        listKeysAsync = async () => {
+          const keys = [];
+          if (idbStorage && idbStorage.database) {
+            try {
+              const idbKeys = await new Promise((resolve) => {
+                const tx = idbStorage.database.transaction(["files"], "readonly");
+                const req = tx.objectStore("files").getAllKeys();
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => resolve([]);
+              });
+              keys.push(...idbKeys);
+            } catch (e) {
+            }
+          }
+          return keys;
+        };
+      } catch (e) {
+        console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
+      }
+      await BlueprintStore.init(this, readFileAsync, listKeysAsync);
       this.modInterface.registerCss(CSS);
       this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);
       this.modInterface.registerIngameKeybinding({

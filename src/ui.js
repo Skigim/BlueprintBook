@@ -2,6 +2,7 @@ import { createTextAreaFormElement } from "../lib/ui.js";
 import { BlueprintStore } from "./store.js";
 import { METADATA } from "./metadata.js";
 import { checkForUpdates } from "./updater.js";
+import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities } from "./preview.js";
 
 const NOTIFY = (shapez && shapez.enumNotificationType) || {
     info: "info", warning: "warning", error: "error", success: "success",
@@ -13,13 +14,49 @@ export function registerNativeChangelogEntry() {
     if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
         const id = `Blueprint Book v${METADATA.version}`;
         if (!shapez.CHANGELOG.some(item => item.version === id)) {
+            const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
+            const matchingEntry = Array.isArray(MOD_CHANGELOG)
+                ? MOD_CHANGELOG.find(item => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer)
+                : null;
+            const entries = getReleaseNotesForVersion(METADATA.version);
+            const date = (matchingEntry && matchingEntry.date) || "2026-07-24";
             shapez.CHANGELOG.unshift({
                 version: id,
-                date: "2026-07-21",
-                entries: MOD_CHANGELOG[0].entries
+                date,
+                entries
             });
         }
     }
+}
+
+export function getLockedEntitiesInBlueprint(root, entities) {
+    if (!entities || !Array.isArray(entities) || !root) return [];
+    const locked = [];
+    for (let i = 0; i < entities.length; i++) {
+        const entity = entities[i];
+        const staticComp = entity.components?.StaticMapEntity;
+        const meta = staticComp?.getMetaBuilding ? staticComp.getMetaBuilding() : null;
+        if (meta) {
+            let unlocked = true;
+            if (root.hubGoals && typeof root.hubGoals.isBuildingUnlocked === "function") {
+                unlocked = root.hubGoals.isBuildingUnlocked(meta);
+            } else if (typeof meta.getIsUnlocked === "function") {
+                unlocked = meta.getIsUnlocked(root);
+            }
+            if (!unlocked) {
+                locked.push(entity);
+            }
+        }
+    }
+    return locked;
+}
+
+export function isBlueprintsUnlocked(root) {
+    if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
+        const reward = (shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints) || "reward_blueprints";
+        return root.hubGoals.isRewardUnlocked(reward);
+    }
+    return true;
 }
 
 export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
@@ -31,11 +68,20 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     bindEvents() {
         const searchInput = this.overlay.querySelector('#bplib-search');
-        searchInput.onpointerdown = () => searchInput.focus();
-        searchInput.addEventListener('input', (e) => {
-            this.searchQuery = e.target.value.toLowerCase();
-            this.render();
-        });
+        if (searchInput) {
+            searchInput.onpointerdown = () => searchInput.focus();
+            searchInput.addEventListener('input', (e) => {
+                this.searchQuery = e.target.value.toLowerCase();
+                this.render();
+            });
+        }
+
+        const grid = this.overlay.querySelector('#bplib-grid');
+        if (grid) {
+            grid.addEventListener('wheel', (e) => {
+                e.stopPropagation();
+            }, { passive: true });
+        }
 
         this.dialog.trackClicks(this.overlay.querySelector('#bplib-btn-import'), () => {
             this.openImportDialog();
@@ -68,19 +114,21 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
         this.root.hud.parts.dialogs.internalShowDialog(dialog);
 
-        dialog.buttonSignals.ok.add(() => {
-            const name = nameInput.getValue() || "New Blueprint";
-            const str = stringInput.getValue();
-            const tagsStr = tagsInput.getValue();
+        if (dialog.buttonSignals && dialog.buttonSignals.ok) {
+            dialog.buttonSignals.ok.add(() => {
+                const name = nameInput.getValue() || "New Blueprint";
+                const str = stringInput.getValue();
+                const tagsStr = tagsInput.getValue();
 
-            if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
+                if (!str.trim()) return this.notify("String cannot be empty", NOTIFY.warning);
 
-            const newTags = tagsStr.split(",")
-                .map(t => t.trim())
-                .filter(t => t.length > 0);
+                const newTags = tagsStr.split(",")
+                    .map(t => t.trim())
+                    .filter(t => t.length > 0);
 
-            onSubmit(name, str, newTags);
-        });
+                onSubmit(name, str, newTags);
+            });
+        }
     }
 
     openImportDialog(initialString = "") {
@@ -102,12 +150,16 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     cleanupDynamicClickDetectors() {
         if (this.dynamicClickDetectors) {
             for (const d of this.dynamicClickDetectors) {
-                d.cleanup();
-                const index = this.clickDetectors.indexOf(d);
-                if (index >= 0) this.clickDetectors.splice(index, 1);
+                if (d && typeof d.cleanup === "function") {
+                    d.cleanup();
+                }
+                if (this.clickDetectors) {
+                    const index = this.clickDetectors.indexOf(d);
+                    if (index >= 0) this.clickDetectors.splice(index, 1);
+                }
             }
+            this.dynamicClickDetectors = [];
         }
-        this.dynamicClickDetectors = [];
     }
 
     trackDynamicClick(element, handler) {
@@ -129,8 +181,8 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         HUDBlueprintLibrary.hasCheckedUpdate = true;
 
         const currentVersion = METADATA.version;
-        const lastSeenVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_last_seen_version") : null;
-        const skippedVersion = typeof localStorage !== "undefined" ? localStorage.getItem("bplib_skipped_version") : null;
+        const lastSeenVersion = BlueprintStore.getLastSeenVersion();
+        const skippedVersion = BlueprintStore.getSkippedVersion();
 
         try {
             const update = await checkForUpdates(currentVersion);
@@ -138,19 +190,11 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             if (update.updateAvailable && update.latestVersion !== skippedVersion) {
                 // Scenario A: A newer version is published on GitHub / Mod.io
                 this.showUpdateDialog(update);
-                try {
-                    if (typeof localStorage !== "undefined") {
-                        localStorage.setItem("bplib_last_seen_version", currentVersion);
-                    }
-                } catch (e) {}
+                BlueprintStore.setLastSeenVersion(currentVersion);
             } else if (lastSeenVersion !== currentVersion) {
                 // Scenario B: First time running this installed version (e.g. v1.0.1 welcome dialog)
                 this.showWelcomeDialog(currentVersion);
-                try {
-                    if (typeof localStorage !== "undefined") {
-                        localStorage.setItem("bplib_last_seen_version", currentVersion);
-                    }
-                } catch (e) {}
+                BlueprintStore.setLastSeenVersion(currentVersion);
             }
         } catch (err) {
             console.error("[BlueprintBook] Update check failed:", err);
@@ -235,9 +279,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         if (dialog.buttonSignals.skipVersion) {
             dialog.buttonSignals.skipVersion.add(() => {
                 try {
-                    if (typeof localStorage !== "undefined") {
-                        localStorage.setItem("bplib_skipped_version", latestVersion);
-                    }
+                    BlueprintStore.setSkippedVersion(latestVersion);
                 } catch (e) {
                     console.error("[BlueprintBook] Failed to save skipped version:", e);
                 }
@@ -259,8 +301,27 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
     }
 
+    isBlueprintsUnlocked() {
+        return isBlueprintsUnlocked(this.root);
+    }
+
+    showBlueprintsNotUnlocked() {
+        if (this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
+            const dialogsT = shapez && shapez.T && shapez.T.dialogs && shapez.T.dialogs.blueprintsNotUnlocked;
+            const title = (dialogsT && dialogsT.title) || "Blueprints Locked";
+            const desc = (dialogsT && dialogsT.desc) || "Unlocks at level 12!";
+            this.root.hud.parts.dialogs.showInfo(title, desc);
+        }
+    }
+
     handleSaveHotkey() {
         if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
+        
+        if (!this.isBlueprintsUnlocked()) {
+            this.showBlueprintsNotUnlocked();
+            return "stop_propagation";
+        }
+
         const selectedUids = this.root.hud.parts.massSelector.selectedUids;
         
         if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
@@ -289,14 +350,20 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     cleanup() {
         super.cleanup();
-        if (this.dialog) {
-            this.dialog.closeRequested.dispatch();
-        }
+        this.cleanupDynamicClickDetectors();
+        this.visible = false;
+        this.dialog = null;
+        this.overlay = null;
     }
 
     show() {
         try {
             if (this.dialog) return;
+
+            if (!this.isBlueprintsUnlocked()) {
+                this.showBlueprintsNotUnlocked();
+                return;
+            }
 
             this.dialog = new shapez.Dialog({
                 app: this.root.app,
@@ -319,7 +386,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.root.hud.parts.dialogs.internalShowDialog(this.dialog);
             
             // Add required shapez CSS classes so our optionParent and dialogModsMod elements are styled correctly
-            this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog");
+            this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog", "dialogUpgrades");
             
             this.visible = true;
             this.overlay = this.dialog.element || document.querySelector('.ingameDialog:last-child');
@@ -340,9 +407,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     close() {
-        if (this.dialog) {
-            this.dialog.closeRequested.dispatch();
+        if (this.dialog && this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
+            this.root.hud.parts.dialogs.closeDialog(this.dialog);
         }
+        this.cleanup();
     }
 
     notify(message, type) {
@@ -351,16 +419,64 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
     }
 
-    equipBlueprint(blueprintString) {
+    async equipBlueprint(blueprintString) {
+        if (!this.isBlueprintsUnlocked()) {
+            this.showBlueprintsNotUnlocked();
+            return;
+        }
+
         try {
-            const modLoader = shapez.BlueprintLibraryModLoader;
-            const bpMod = modLoader.mods.find(m => m.metadata.id === "bp-string");
+            const modLoader = shapez?.BlueprintLibraryModLoader;
+            if (!modLoader || !Array.isArray(modLoader.mods)) {
+                this.notify("Blueprint strings mod loader unavailable.", NOTIFY.error);
+                return;
+            }
+            const bpMod = modLoader.mods.find(m => m?.metadata?.id === "bp-string");
+            if (!bpMod || !bpMod.constructor || typeof bpMod.constructor.deserialize !== "function") {
+                this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
+                return;
+            }
             const entities = bpMod.constructor.deserialize(this.root, blueprintString);
             
             if (entities) {
+                const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
+                if (lockedEntities && lockedEntities.length > 0) {
+                    const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
+                    const warningType = (shapez && shapez.enumNotificationType && shapez.enumNotificationType.warning) || NOTIFY.warning;
+                    if (this.root.hud?.parts?.notifications?.sendNotification) {
+                        this.root.hud.parts.notifications.sendNotification(warningMsg, warningType);
+                    } else {
+                        this.notify(warningMsg, warningType);
+                    }
+                    return;
+                }
+
                 const blueprint = new shapez.Blueprint(entities);
-                this.root.hud.parts.blueprintPlacer.currentBlueprint.set(blueprint);
-                this.root.hud.signals.pasteBlueprintRequested.dispatch();
+                
+                if (this.root.hud?.parts?.blueprintPlacer) {
+                    this.root.hud.parts.blueprintPlacer.lastBlueprintUsed = blueprint;
+                    if (this.root.hud.parts.blueprintPlacer.currentBlueprint?.set) {
+                        this.root.hud.parts.blueprintPlacer.currentBlueprint.set(blueprint);
+                    }
+                }
+
+                try {
+                    if (navigator?.clipboard?.writeText) {
+                        await navigator.clipboard.writeText(blueprintString);
+                    }
+                } catch (e) {
+                    console.warn("[BlueprintBook] Clipboard write failed:", e);
+                }
+
+                if (this.root.keymapper?.emit) {
+                    this.root.keymapper.emit("pasteBlueprintRequested");
+                } else if (this.root.keyMapper?.emit) {
+                    this.root.keyMapper.emit("pasteBlueprintRequested");
+                }
+                if (this.root.hud?.signals?.pasteBlueprintRequested) {
+                    this.root.hud.signals.pasteBlueprintRequested.dispatch();
+                }
+
                 this.notify("Blueprint equipped!", NOTIFY.success);
                 this.close();
             } else {
@@ -402,67 +518,93 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.notify("Error rendering Blueprint Book. Check console.", NOTIFY.error);
         }
     }
-
     _createBlueprintCard(bp, trackClick) {
         const card = document.createElement('div');
-        card.className = 'bplib-upgrade';
-        
+        card.className = 'bplib-upgrade shopCard';
+
         const titleDiv = document.createElement('div');
         titleDiv.className = 'title';
         
         const nameDiv = document.createElement('div');
         nameDiv.className = 'name';
-        nameDiv.innerText = bp.name;
-        
-        const tierDiv = document.createElement('div');
-        tierDiv.className = 'tier';
-        tierDiv.innerText = 'BP';
-        
+        nameDiv.textContent = bp.name || 'Untitled';
+
         titleDiv.appendChild(nameDiv);
-        titleDiv.appendChild(tierDiv);
 
         const descDiv = document.createElement('div');
         descDiv.className = 'description';
-        descDiv.innerText = `Tags: ${(bp.tags || []).join(', ') || 'None'}`;
+        descDiv.textContent = `Tags: ${(bp.tags || []).join(', ') || 'None'}`;
         
         const delBtn = document.createElement('button');
         delBtn.className = 'bplib-action-delete';
         delBtn.title = 'Delete Blueprint';
-        delBtn.innerText = 'X';
+        delBtn.textContent = 'X';
         trackClick(delBtn, () => {
             this.deleteBlueprint(bp);
         });
         descDiv.appendChild(delBtn);
 
-        const iconDiv = document.createElement('div');
-        iconDiv.className = 'icon';
-
         const reqDiv = document.createElement('div');
         reqDiv.className = 'requirements';
+
+        if (!this._cardCache) {
+            this._cardCache = new Map();
+        }
+
+        const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
+        let cached = this._cardCache.get(cacheKey);
+        if (!cached) {
+            const entities = deserializeBlueprintEntities(this.root, bp?.value);
+            const cost = getBlueprintCost(this.root, entities);
+            const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
+            cached = { entities, cost, lockedEntities };
+            this._cardCache.set(cacheKey, cached);
+        }
+
+        const { entities, cost, lockedEntities } = cached;
+
+        if (cost !== null && cost !== undefined) {
+            const costElem = renderBlueprintCostElement(this.root, cost, 24);
+            reqDiv.appendChild(costElem);
+        }
 
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'bplib-upgrade-actions';
 
+        const previewBtn = document.createElement('button');
+        previewBtn.className = 'button styledButton bplib-btn-preview';
+        previewBtn.textContent = 'PREVIEW';
+        trackClick(previewBtn, () => {
+            openBlueprintPreviewDialog(this.root, bp, () => this.equipBlueprint(bp.value));
+        });
+
         const equipBtn = document.createElement('button');
         equipBtn.className = 'button styledButton good bplib-btn-equip';
-        equipBtn.innerText = 'EQUIP';
+        equipBtn.textContent = 'EQUIP';
         trackClick(equipBtn, () => {
+            if (lockedEntities && lockedEntities.length > 0) return;
             this.equipBlueprint(bp.value);
         });
 
+        if (lockedEntities && lockedEntities.length > 0) {
+            equipBtn.classList.add("disabled");
+            equipBtn.disabled = true;
+            equipBtn.title = "Contains locked buildings (unlocked at higher level)";
+        }
+
         const editBtn = document.createElement('button');
         editBtn.className = 'button styledButton bplib-btn-edit';
-        editBtn.innerText = 'EDIT';
+        editBtn.textContent = 'EDIT';
         trackClick(editBtn, () => {
             this.editBlueprint(bp);
         });
 
+        actionsDiv.appendChild(previewBtn);
         actionsDiv.appendChild(equipBtn);
         actionsDiv.appendChild(editBtn);
 
         card.appendChild(titleDiv);
         card.appendChild(descDiv);
-        card.appendChild(iconDiv);
         card.appendChild(reqDiv);
         card.appendChild(actionsDiv);
 
