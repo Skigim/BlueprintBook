@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock the global shapez object before importing ui.js
 global.shapez = {
+    Mod: class {},
     BaseHUDPart: class {
         constructor(root) {
             this.root = root;
@@ -1015,6 +1016,63 @@ describe('Dev Version Change Toggle - UI Features', () => {
         expect(BlueprintStore.getLastSeenVersion()).toBe(calledVersion);
     });
 });
+
+describe('window.BlueprintBookDev Global Helper', () => {
+    beforeEach(() => {
+        vi.resetModules();
+        delete window.BlueprintBookDev;
+        delete global.IS_DEV;
+        window.$shapez_registerMod = vi.fn();
+    });
+
+    it('attaches BlueprintBookDev window helper when in dev mode and toggles devForceFreshUpdate', async () => {
+        global.IS_DEV = true;
+        const { BlueprintStore } = await import('../src/store.js');
+        const mockMod = {
+            settings: { devForceFreshUpdate: false }
+        };
+        BlueprintStore.mod = mockMod;
+        BlueprintStore.persist = vi.fn();
+
+        await import('../src/index.js');
+
+        expect(window.BlueprintBookDev).toBeDefined();
+        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(false);
+
+        const newStatus = window.BlueprintBookDev.toggleFreshUpdate();
+        expect(newStatus).toBe(true);
+        expect(mockMod.settings.devForceFreshUpdate).toBe(true);
+        expect(BlueprintStore.persist).toHaveBeenCalled();
+        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(true);
+
+        const toggledBack = window.BlueprintBookDev.toggleFreshUpdate();
+        expect(toggledBack).toBe(false);
+        expect(mockMod.settings.devForceFreshUpdate).toBe(false);
+        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(false);
+    });
+
+    it('returns false when BlueprintStore.mod or settings is undefined', async () => {
+        global.IS_DEV = true;
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.mod = null;
+
+        await import('../src/index.js');
+
+        expect(window.BlueprintBookDev).toBeDefined();
+        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(false);
+
+        const status = window.BlueprintBookDev.toggleFreshUpdate();
+        expect(status).toBe(false);
+    });
+
+    it('does not attach BlueprintBookDev when isDev is false', async () => {
+        global.IS_DEV = false;
+        await import('../src/index.js');
+
+        expect(window.BlueprintBookDev).toBeUndefined();
+    });
+});
+
 
 
 

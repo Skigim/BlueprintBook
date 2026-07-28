@@ -129,4 +129,20 @@ class BlueprintLibraryMod extends shapez.Mod {
     }
 }
 
+const isDev = typeof IS_DEV !== "undefined" ? Boolean(IS_DEV) : Boolean(METADATA.isDev);
+if (isDev) {
+    window.BlueprintBookDev = {
+        toggleFreshUpdate: () => {
+            if (BlueprintStore.mod && BlueprintStore.mod.settings) {
+                BlueprintStore.mod.settings.devForceFreshUpdate = !BlueprintStore.mod.settings.devForceFreshUpdate;
+                BlueprintStore.persist();
+                return BlueprintStore.mod.settings.devForceFreshUpdate;
+            }
+            return false;
+        },
+        isFreshUpdateEnabled: () => Boolean(BlueprintStore.mod?.settings?.devForceFreshUpdate)
+    };
+}
+
 window.$shapez_registerMod(BlueprintLibraryMod, METADATA);
+
