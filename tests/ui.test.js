@@ -905,5 +905,117 @@ describe('registerNativeChangelogEntry', () => {
     });
 });
 
+describe('Dev Version Change Toggle - UI Features', () => {
+    let mockRoot;
+    let hudLibrary;
+    let mockDialogElem;
+    let mockOverlay;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockDialogElem = document.createElement('div');
+        mockOverlay = document.createElement('div');
+
+        const mockDialog = {
+            dialogElem: mockDialogElem,
+            element: mockOverlay,
+            buttonSignals: {},
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function (opts = {}) {
+            mockOverlay.innerHTML = opts.contentHTML || opts.content || '';
+            return mockDialog;
+        });
+        global.shapez.ClickDetector = class {
+            constructor(element, opts) {
+                this.element = element;
+                this.click = { add: (handler, receiver) => { element.addEventListener('click', (e) => handler.call(receiver, e)); } };
+            }
+            cleanup() {}
+        };
+
+        mockRoot = {
+            app: {
+                modLoader: {
+                    mods: [{ metadata: { id: 'bp-library', isDev: true }, meta: { version: METADATA.version, isDev: true }, settings: { devForceFreshUpdate: false, availableTags: [], blueprints: [] } }]
+                }
+            },
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() }
+                },
+                signals: {
+                    notification: { dispatch: vi.fn() }
+                }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: { devForceFreshUpdate: false, availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
+        BlueprintStore.mod = mockRoot.app.modLoader.mods[0];
+
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+    });
+
+    afterEach(() => {
+        if (hudLibrary) hudLibrary.cleanup();
+    });
+
+    it('renders dev toggle button in toolbar when isDevMode() returns true and handles click', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        vi.spyOn(hudLibrary, 'isDevMode').mockReturnValue(true);
+
+        hudLibrary.show();
+
+        const devBtn = hudLibrary.overlay.querySelector('#bplib-btn-dev-toggle');
+        expect(devBtn).not.toBeNull();
+        expect(devBtn.textContent).toContain('DEV: Fresh Update [OFF]');
+
+        // Click the dev toggle button
+        devBtn.click();
+
+        expect(BlueprintStore.mod.settings.devForceFreshUpdate).toBe(true);
+        expect(mockRoot.hud.signals.notification.dispatch).toHaveBeenCalledWith(
+            '[DEV] Fresh update on boot: ENABLED',
+            expect.anything()
+        );
+    });
+
+    it('omits dev toggle button when isDevMode() returns false', () => {
+        vi.spyOn(hudLibrary, 'isDevMode').mockReturnValue(false);
+
+        hudLibrary.show();
+
+        const devBtn = hudLibrary.overlay.querySelector('#bplib-btn-dev-toggle');
+        expect(devBtn).toBeNull();
+    });
+
+    it('checkUpdateOnce uses getActiveVersion so devForceFreshUpdate = true triggers welcome dialog on boot', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        mockRoot.app.modLoader.mods[0].settings.devForceFreshUpdate = true;
+        BlueprintStore.init({ settings: { devForceFreshUpdate: true, availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
+        BlueprintStore.mod = mockRoot.app.modLoader.mods[0];
+        BlueprintStore.setLastSeenVersion(METADATA.version);
+
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+        hudLibrary.showWelcomeDialog = vi.fn();
+
+        await hudLibrary.checkUpdateOnce();
+
+        expect(hudLibrary.showWelcomeDialog).toHaveBeenCalled();
+        const calledVersion = hudLibrary.showWelcomeDialog.mock.calls[0][0];
+        expect(calledVersion).toContain(`${METADATA.version}-dev.`);
+        expect(BlueprintStore.getLastSeenVersion()).toBe(calledVersion);
+    });
+});
+
+
 
 
