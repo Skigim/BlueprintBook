@@ -1,12 +1,27 @@
+export function getActiveVersion(mod, forceIsDev = null) {
+    const baseVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "1.0.3";
+    const isDev = forceIsDev !== null
+        ? Boolean(forceIsDev)
+        : (typeof IS_DEV !== "undefined" ? Boolean(IS_DEV) : Boolean(mod && mod.meta && mod.meta.isDev));
+    if (isDev && mod && mod.settings && mod.settings.devForceFreshUpdate === true) {
+        return `${baseVersion}-dev.${Date.now()}`;
+    }
+    return baseVersion;
+}
+
 export const BlueprintStore = {
     mod: null,
 
-    async init(mod, readFileAsync = null, listKeysAsync = null) {
+    async init(mod, readFileAsync = null, listKeysAsync = null, forceIsDev = null) {
         if (!mod || typeof mod !== "object") return;
         this.mod = mod;
 
         if (!mod.settings || typeof mod.settings !== "object") {
             mod.settings = {};
+        }
+
+        if (typeof mod.settings.devForceFreshUpdate !== "boolean") {
+            mod.settings.devForceFreshUpdate = false;
         }
 
         if (!Array.isArray(mod.settings.blueprints)) {
@@ -20,7 +35,7 @@ export const BlueprintStore = {
             mod.settings.deletedNames = [];
         }
 
-        const currentVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "";
+        const currentVersion = getActiveVersion(mod, forceIsDev);
         if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
             await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
             mod.settings.migrationVersion = currentVersion;

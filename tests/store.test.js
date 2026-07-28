@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { BlueprintStore } from '../src/store.js';
+import { BlueprintStore, getActiveVersion } from '../src/store.js';
 import { METADATA } from '../src/metadata.js';
 
 describe('BlueprintStore Logic', () => {
@@ -422,5 +422,51 @@ describe('BlueprintStore Logic', () => {
             expect(METADATA.settings.devForceFreshUpdate).toBe(false);
         });
     });
+
+    describe('getActiveVersion', () => {
+        it('returns base version when devForceFreshUpdate is false', () => {
+            const mod = { meta: { version: '1.0.3' }, settings: { devForceFreshUpdate: false } };
+            expect(getActiveVersion(mod)).toBe('1.0.3');
+        });
+
+        it('returns default base version 1.0.3 when mod or meta.version is missing', () => {
+            expect(getActiveVersion(null)).toBe('1.0.3');
+            expect(getActiveVersion({})).toBe('1.0.3');
+        });
+
+        it('returns dynamic baseVersion-dev.<timestamp> string when devForceFreshUpdate is true in dev mode', () => {
+            const mod = { meta: { version: '1.0.3' }, settings: { devForceFreshUpdate: true } };
+            const version = getActiveVersion(mod, true);
+            expect(version).toMatch(/^1\.0\.3-dev\.\d+$/);
+        });
+
+        it('returns base version when devForceFreshUpdate is true but isDev is false', () => {
+            const mod = { meta: { version: '1.0.3' }, settings: { devForceFreshUpdate: true } };
+            const version = getActiveVersion(mod, false);
+            expect(version).toBe('1.0.3');
+        });
+    });
+
+    describe('devForceFreshUpdate & getActiveVersion store integration', () => {
+        it('initializes devForceFreshUpdate to false if not present', async () => {
+            const mod = { settings: {} };
+            await BlueprintStore.init(mod);
+            expect(mod.settings.devForceFreshUpdate).toBe(false);
+        });
+
+        it('triggers migrateLegacySettings when devForceFreshUpdate is true', async () => {
+            const spy = vi.spyOn(BlueprintStore, 'migrateLegacySettings');
+            const mod = {
+                meta: { version: '1.0.3' },
+                settings: { devForceFreshUpdate: true, migrationVersion: '1.0.3' },
+                saveSettings: () => {}
+            };
+            await BlueprintStore.init(mod, null, null, true);
+            expect(spy).toHaveBeenCalled();
+            expect(mod.settings.migrationVersion).toMatch(/^1\.0\.3-dev\.\d+$/);
+            spy.mockRestore();
+        });
+    });
 });
+
 
