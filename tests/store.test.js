@@ -415,4 +415,12 @@ describe('BlueprintStore Logic', () => {
             });
         });
     });
+
+    describe('Metadata Dev Configuration', () => {
+        it('includes isDev and devForceFreshUpdate in METADATA', () => {
+            expect(METADATA.isDev).toBe(false);
+            expect(METADATA.settings.devForceFreshUpdate).toBe(false);
+        });
+    });
 });
+

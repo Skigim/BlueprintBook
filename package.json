@@ -5,7 +5,8 @@
   "main": "BlueprintLibrary.mod.js",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/index.js --bundle --outfile=BlueprintLibrary.mod.js --format=iife",
+    "build": "esbuild src/index.js --bundle --outfile=BlueprintLibrary.mod.js --format=iife --define:IS_DEV=false",
+    "build:dev": "esbuild src/index.js --bundle --outfile=BlueprintLibrary.mod.js --format=iife --define:IS_DEV=true",
     "test": "vitest run"
   },
   "repository": {

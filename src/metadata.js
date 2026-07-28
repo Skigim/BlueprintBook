@@ -8,6 +8,7 @@ export const METADATA = {
     minimumGameVersion: ">=1.5.0",
     doesNotAffectSavegame: true,
     dependencies: ["bp-string"],
+    isDev: false,
     settings: {
         blueprints: [],
         nextBlueprintId: 1,
@@ -16,5 +17,7 @@ export const METADATA = {
         skippedVersion: "",
         deletedValues: [],
         deletedNames: [],
+        devForceFreshUpdate: false,
     },
 };
+
