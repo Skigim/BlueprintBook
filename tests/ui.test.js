@@ -851,7 +851,7 @@ describe('registerNativeChangelogEntry', () => {
 
         expect(global.shapez.CHANGELOG.length).toBe(1);
         expect(global.shapez.CHANGELOG[0].version).toBe(`Blueprint Book v${METADATA.version}`);
-        expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-24');
+        expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-28');
         expect(Array.isArray(global.shapez.CHANGELOG[0].entries)).toBe(true);
         expect(global.shapez.CHANGELOG[0].entries.length).toBeGreaterThan(0);
 

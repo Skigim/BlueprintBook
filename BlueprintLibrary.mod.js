@@ -1366,9 +1366,16 @@
   var MOD_CHANGELOG = [
     {
       version: "1.0.3",
-      date: "2026-07-24",
+      date: "2026-07-28",
       entries: [
-        "<strong>Development Version</strong>: Initializing 1.0.3 development release."
+        "<strong>Native BaseHUDPart Architecture</strong>: Converted main window to native BaseHUDPart lifecycle, integrating smoothly with in-game overlays.",
+        "<strong>Statistics-Style Segmented Tab Bar</strong>: Redesigned tag filter header into native segmented pill tabs with dynamic UI scale support.",
+        "<strong>Horizontal Tag Scrolling</strong>: Added smooth horizontal scrolling with hidden scrollbar tracks for large tag collections.",
+        "<strong>Compact Import Button & Right-Aligned Toolbar</strong>: Replaced wide import button with compact blue '+' button next to right-aligned search bar.",
+        "<strong>Library Card Progression Lock Fix</strong>: Fixed several buildings not properly progression-locked from the library card view.",
+        "<strong>Rapid Blueprint Deletion Sync Fix</strong>: Fixed multiple click requirement when rapidly deleting blueprints.",
+        "<strong>Save Hotkey (Ctrl+P) Fix</strong>: Fixed Ctrl+P saving when copying un-saved blueprints from the world.",
+        "<strong>Deleted Blueprint Resurfacing Fix</strong>: Fixed version migration tracking so deleted blueprints do not resurface on update."
       ]
     },
     {
@@ -1403,6 +1410,7 @@
     const entry = MOD_CHANGELOG.find((item) => item.version.replace(/^v/i, "").trim() === cleanVer);
     return entry ? entry.entries : [];
   }
+  var RELEASE_NOTES_1_0_3 = getReleaseNotesForVersion("1.0.3");
   var RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
   var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
