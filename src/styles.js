@@ -58,12 +58,12 @@ export const CSS = `
     /* --- TOOLBAR CONTAINER --- */
     .bplib-toolbar {
         display: flex;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: calc(10px * var(--ui-scale));
+        margin-bottom: calc(12px * var(--ui-scale));
         align-items: center;
     }
 
-    /* --- STATISTICS TABS EXACT MATCH (SCALED TO UI SCALE 28px) --- */
+    /* --- STATISTICS TABS EXACT NATIVE MATCH --- */
     .bplib-filterHeader {
         display: flex;
         padding: 0;
@@ -71,33 +71,33 @@ export const CSS = `
         align-items: center;
     }
     .bplib-filterHeader button {
-        height: 28px;
-        padding: 2px 14px;
+        height: calc(20px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(10px * var(--ui-scale));
         border: 0;
         box-shadow: none;
-        min-width: 36px;
+        min-width: calc(30px * var(--ui-scale));
         color: #fff;
         opacity: 0.25;
         border-radius: 0;
-        font-size: 13px;
+        font-size: calc(11px * var(--ui-scale));
         font-family: "GameFont", sans-serif;
         text-transform: uppercase;
         cursor: pointer;
         background-color: #44484a !important;
         transition: opacity 0.2s ease-in-out;
         margin: 0;
-        box-sizing: border-box;
+        box-sizing: content-box;
     }
     html[data-theme="dark"] .bplib-filterHeader button {
         background-color: #585e6d !important;
     }
     .bplib-filterHeader button:first-child {
-        border-top-left-radius: 5px;
-        border-bottom-left-radius: 5px;
+        border-top-left-radius: calc(6px * var(--ui-scale));
+        border-bottom-left-radius: calc(6px * var(--ui-scale));
     }
     .bplib-filterHeader button:last-child {
-        border-top-right-radius: 5px;
-        border-bottom-right-radius: 5px;
+        border-top-right-radius: calc(6px * var(--ui-scale));
+        border-bottom-right-radius: calc(6px * var(--ui-scale));
     }
     .bplib-filterHeader button:hover {
         opacity: 0.6;
@@ -110,29 +110,30 @@ export const CSS = `
     .bplib-toolbar-right {
         margin-left: auto;
         display: flex;
-        gap: 8px;
+        gap: calc(8px * var(--ui-scale));
         align-items: center;
     }
 
     /* --- BLUE '+' IMPORT BUTTON --- */
     .bplib-toolbar .bplib-btn-import {
-        height: 28px;
-        width: 32px;
-        min-width: 32px;
-        padding: 0 !important;
+        height: calc(20px * var(--ui-scale));
+        width: calc(26px * var(--ui-scale));
+        min-width: calc(26px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) !important;
         display: flex;
         align-items: center;
         justify-content: center;
         background-color: #4a97df !important;
         color: #ffffff !important;
         opacity: 0.9;
-        font-size: 18px;
+        font-size: calc(15px * var(--ui-scale));
         font-weight: bold;
         border: 0;
-        border-radius: 5px;
+        border-radius: calc(6px * var(--ui-scale));
         cursor: pointer;
         box-shadow: none;
         line-height: 1;
+        box-sizing: content-box;
         transition: opacity 0.2s ease-in-out, background-color 0.12s ease-in-out;
     }
     .bplib-toolbar .bplib-btn-import:hover {
@@ -140,14 +141,14 @@ export const CSS = `
         background-color: #3b82c4 !important;
     }
 
-    /* --- SEARCH BAR (FAR RIGHT, MATCHING 28px HEIGHT) --- */
+    /* --- SEARCH BAR (MATCHING NATIVE HEIGHT) --- */
     .bplib-toolbar #bplib-search {
-        height: 28px;
-        width: 200px;
-        padding: 2px 10px;
-        box-sizing: border-box;
-        font-size: 12px;
-        border-radius: 5px;
+        height: calc(20px * var(--ui-scale));
+        width: calc(180px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(8px * var(--ui-scale));
+        box-sizing: content-box;
+        font-size: calc(11px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
         border: 0;
         background-color: #44484a;
         color: #fff;
