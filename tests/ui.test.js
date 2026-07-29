@@ -370,26 +370,6 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
     });
 
     it('attaches a wheel event listener to #bplib-grid that calls stopPropagation', async () => {
-        const mockDialogElem = document.createElement('div');
-        const mockOverlay = document.createElement('div');
-        mockOverlay.innerHTML = `
-            <div class="bplib-dialog-content">
-                <div id="bplib-search"></div>
-                <div id="bplib-btn-import"></div>
-                <div id="bplib-filter-tags"></div>
-                <div id="bplib-grid" class="bplib-grid"></div>
-            </div>
-        `;
-
-        const mockDialog = {
-            dialogElem: mockDialogElem,
-            element: mockOverlay,
-            trackClicks: vi.fn(),
-            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
-        };
-
-        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
-
         const mockRoot = {
             app: {},
             hud: {
@@ -403,11 +383,12 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
 
         const { HUDBlueprintLibrary } = await import('../src/ui.js');
         const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.createElements(document.createElement('div'));
         hudLibrary.render = vi.fn();
 
         hudLibrary.show();
 
-        const gridElem = mockOverlay.querySelector('#bplib-grid');
+        const gridElem = hudLibrary.overlay.querySelector('#bplib-grid');
         expect(gridElem).not.toBeNull();
 
         // Dispatch a wheel event and verify stopPropagation is called
@@ -419,18 +400,7 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
         expect(stopPropagationSpy).toHaveBeenCalled();
     });
 
-    it('adds dialogUpgrades class to dialog.dialogElem when show() is called', async () => {
-        const mockDialogElem = document.createElement('div');
-        const mockOverlay = document.createElement('div');
-        const mockDialog = {
-            dialogElem: mockDialogElem,
-            element: mockOverlay,
-            trackClicks: vi.fn(),
-            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
-        };
-
-        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
-
+    it('adds dialogUpgrades class to dialogInner when createElements() is called', async () => {
         const mockRoot = {
             app: {},
             hud: {
@@ -442,11 +412,9 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
 
         const { HUDBlueprintLibrary } = await import('../src/ui.js');
         const hudLibrary = new HUDBlueprintLibrary(mockRoot);
-        hudLibrary.render = vi.fn();
+        hudLibrary.createElements(document.createElement('div'));
 
-        hudLibrary.show();
-
-        expect(mockDialogElem.classList.contains('dialogUpgrades')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('dialogUpgrades')).toBe(true);
     });
 });
 
@@ -484,22 +452,11 @@ describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
 
         const { HUDBlueprintLibrary } = await import('../src/ui.js');
         hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.createElements(document.createElement('div'));
         hudLibrary.registerClickDetector = vi.fn();
     });
 
-    it('resets visible to false and cleans up dialog when equipBlueprint is called', async () => {
-        let mockDialogInstance;
-        global.shapez.Dialog = class {
-            constructor(opts) {
-                const elem = document.createElement('div');
-                elem.innerHTML = opts.contentHTML || opts.content || '';
-                this.dialogElem = elem;
-                this.element = elem;
-                this.trackClicks = vi.fn();
-                this.closeRequested = { add: vi.fn(), dispatch: vi.fn() };
-                mockDialogInstance = this;
-            }
-        };
+    it('resets visible to false when equipBlueprint is called', async () => {
         global.shapez.ClickDetector = class { constructor() { this.click = { add: vi.fn() }; } };
         global.shapez.Blueprint = class { constructor(e) {} };
         global.shapez.BlueprintLibraryModLoader = {
@@ -514,9 +471,7 @@ describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
 
         await hudLibrary.equipBlueprint('VALID_BP_STRING');
 
-        expect(mockRoot.hud.parts.dialogs.closeDialog).toHaveBeenCalledWith(mockDialogInstance);
         expect(hudLibrary.visible).toBe(false);
-        expect(hudLibrary.dialog).toBeNull();
     });
 
     it('removes summary badge and BP tier badge entirely from card, and styles PREVIEW button natively', () => {
@@ -986,6 +941,119 @@ describe('Dev Version Change - Dynamic Boot Check', () => {
         expect(BlueprintStore.getLastSeenVersion()).toBe(calledVersion);
     });
 });
+
+describe('BaseHUDPart Lifecycle & isBlockingOverlay Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+    let mockInputMgr;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockInputMgr = {
+            makeSureAttachedAndOnTop: vi.fn(),
+            makeSureDetached: vi.fn()
+        };
+
+        mockRoot = {
+            app: {
+                inputMgr: mockInputMgr
+            },
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+
+        global.shapez.DynamicDomAttach = class {
+            constructor(root, element, opts) {
+                this.root = root;
+                this.element = element;
+                this.opts = opts;
+            }
+            update(visible) {
+                if (visible) {
+                    this.element.classList.add(this.opts.attachClass || 'visible');
+                } else {
+                    this.element.classList.remove(this.opts.attachClass || 'visible');
+                }
+            }
+        };
+        global.shapez.InputReceiver = class {
+            constructor(id) {
+                this.id = id;
+            }
+        };
+        global.shapez.KeyActionMapper = class {
+            constructor(root, receiver) {
+                this.root = root;
+                this.receiver = receiver;
+            }
+            getBinding() {
+                return { add: vi.fn() };
+            }
+        };
+        global.shapez.KEYMAPPINGS = {
+            general: { back: 'back' },
+            ingame: { menuClose: 'menuClose' }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+    });
+
+    it('createElements builds #ingame_HUD_BlueprintLibrary container with .ingameDialog and .dialogInner', () => {
+        const parentElem = document.createElement('div');
+        hudLibrary.createElements(parentElem);
+
+        expect(hudLibrary.background).not.toBeNull();
+        expect(hudLibrary.background.id).toBe('ingame_HUD_BlueprintLibrary');
+        expect(hudLibrary.background.classList.contains('ingameDialog')).toBe(true);
+
+        expect(hudLibrary.dialogInner).not.toBeNull();
+        expect(hudLibrary.dialogInner.classList.contains('dialogInner')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('dialogMods')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('optionChooserDialog')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('dialogUpgrades')).toBe(true);
+        expect(hudLibrary.overlay).toBe(hudLibrary.dialogInner);
+    });
+
+    it('isBlockingOverlay() returns false when hidden and true when shown', () => {
+        const parentElem = document.createElement('div');
+        hudLibrary.createElements(parentElem);
+        hudLibrary.initialize();
+
+        expect(hudLibrary.isBlockingOverlay()).toBe(false);
+
+        hudLibrary.show();
+        expect(hudLibrary.isBlockingOverlay()).toBe(true);
+
+        hudLibrary.close();
+        expect(hudLibrary.isBlockingOverlay()).toBe(false);
+    });
+
+    it('show() and close() toggle this.visible and attach/detach inputReceiver', () => {
+        const parentElem = document.createElement('div');
+        hudLibrary.createElements(parentElem);
+        hudLibrary.initialize();
+
+        expect(hudLibrary.visible).toBe(false);
+
+        hudLibrary.show();
+        expect(hudLibrary.visible).toBe(true);
+        expect(mockInputMgr.makeSureAttachedAndOnTop).toHaveBeenCalledWith(hudLibrary.inputReceiver);
+
+        hudLibrary.close();
+        expect(hudLibrary.visible).toBe(false);
+        expect(mockInputMgr.makeSureDetached).toHaveBeenCalledWith(hudLibrary.inputReceiver);
+    });
+});
+
 
 
 

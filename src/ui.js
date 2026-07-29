@@ -60,10 +60,43 @@ export function isBlueprintsUnlocked(root) {
 }
 
 export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
-    createElements(parent) {
+    createElements(parent = document.body) {
         this.parent = parent;
         this.activeTagFilter = null;
         this.searchQuery = "";
+
+        const makeDiv = (shapez && shapez.makeDiv) || ((p, id, classes, text) => {
+            const el = document.createElement("div");
+            if (id) el.id = id;
+            if (classes && Array.isArray(classes)) classes.forEach(c => el.classList.add(c));
+            if (text) el.textContent = text;
+            if (p) (p.element || p).appendChild(el);
+            return el;
+        });
+
+        this.background = makeDiv(parent, "ingame_HUD_BlueprintLibrary", ["ingameDialog"]);
+        this.dialogInner = makeDiv(this.background, null, ["dialogInner", "dialogMods", "optionChooserDialog", "dialogUpgrades"]);
+        this.title = makeDiv(this.dialogInner, null, ["title"], "Blueprint Book");
+        this.closeButton = makeDiv(this.title, null, ["closeButton"]);
+
+        if (typeof this.trackClicks === "function") {
+            this.trackClicks(this.closeButton, this.close);
+        }
+        if (typeof this.closeOnBackgroundClick === "function") {
+            this.closeOnBackgroundClick(this.background, this.close);
+        }
+
+        const toolbar = makeDiv(this.dialogInner, "bplib-toolbar", ["bplib-toolbar"]);
+        toolbar.innerHTML = `
+            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
+            <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
+        `;
+
+        this.filterHeader = makeDiv(this.dialogInner, "bplib-filter-tags", ["bplib-filterHeader"]);
+        this.gridContainer = makeDiv(this.dialogInner, "bplib-grid", ["bplib-grid"]);
+
+        this.overlay = this.dialogInner;
+        this.bindEvents();
     }
 
     bindEvents() {
@@ -84,9 +117,16 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             }, { passive: true });
         }
 
-        this.dialog.trackClicks(this.overlay.querySelector('#bplib-btn-import'), () => {
-            this.openImportDialog();
-        });
+        const importBtn = this.overlay.querySelector('#bplib-btn-import');
+        if (importBtn) {
+            if (typeof this.trackClicks === "function") {
+                this.trackClicks(importBtn, () => this.openImportDialog());
+            } else if (this.dialog && typeof this.dialog.trackClicks === "function") {
+                this.dialog.trackClicks(importBtn, () => this.openImportDialog());
+            } else {
+                importBtn.addEventListener('click', () => this.openImportDialog());
+            }
+        }
     }
 
     _showBlueprintFormDialog({ title, desc, defaults = {}, textareaId = "string", onSubmit }) {
@@ -154,10 +194,6 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                 if (d && typeof d.cleanup === "function") {
                     d.cleanup();
                 }
-                if (this.clickDetectors) {
-                    const index = this.clickDetectors.indexOf(d);
-                    if (index >= 0) this.clickDetectors.splice(index, 1);
-                }
             }
             this.dynamicClickDetectors = [];
         }
@@ -174,10 +210,35 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     initialize() {
+        if (!this.background) {
+            this.createElements(this.parent || document.body);
+        }
+
         this.visible = false;
         this.updateDialog = null;
         this.latestUpdateInfo = null;
+
+        if (shapez && shapez.DynamicDomAttach) {
+            this.domAttach = new shapez.DynamicDomAttach(this.root, this.background, {
+                attachClass: "visible",
+            });
+        }
+
+        if (shapez && shapez.InputReceiver && shapez.KeyActionMapper) {
+            this.inputReceiver = new shapez.InputReceiver("blueprintLibrary");
+            this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver);
+            if (shapez.KEYMAPPINGS) {
+                if (shapez.KEYMAPPINGS.general?.back) {
+                    this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.general.back).add(this.close, this);
+                }
+                if (shapez.KEYMAPPINGS.ingame?.menuClose) {
+                    this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.ingame.menuClose).add(this.close, this);
+                }
+            }
+        }
+
         registerNativeChangelogEntry();
+        this.close();
         this.checkUpdateOnce();
     }
 
@@ -195,12 +256,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             if (update && update.updateAvailable) {
                 this.latestUpdateInfo = update;
                 if (update.latestVersion !== skippedVersion) {
-                    // Scenario A: A newer version is published on GitHub / Mod.io
                     this.showUpdateDialog(update);
                     BlueprintStore.setLastSeenVersion(currentVersion);
                 }
             } else if (lastSeenVersion !== currentVersion) {
-                // Scenario B: First time running this installed version (e.g. v1.0.1 welcome dialog)
                 this.showWelcomeDialog(currentVersion);
                 BlueprintStore.setLastSeenVersion(currentVersion);
             }
@@ -380,6 +439,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
     }
 
+    isBlockingOverlay() {
+        return Boolean(this.visible);
+    }
+
     handleSaveHotkey() {
         if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
         
@@ -395,10 +458,9 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         const bpMod = shapez.BlueprintLibraryModLoader.mods.find(m => m.metadata.id === "bp-string");
         if (!bpMod) return "stop_propagation";
 
-        // Get the actual entities from the UIDs
         const selectedEntities = Array.from(selectedUids)
             .map(uid => this.root.entityMgr.findByUid(uid))
-            .filter(Boolean); // Remove any null/undefined
+            .filter(Boolean);
 
         const blueprintString = bpMod.constructor.serialize(selectedEntities);
         this.openImportDialog(blueprintString);
@@ -407,7 +469,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     handleToggleHotkey() {
         if (this.visible) {
-            if (this.dialog) this.dialog.closeRequested.dispatch();
+            this.close();
         } else {
             this.show();
         }
@@ -415,63 +477,32 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     cleanup() {
-        super.cleanup();
+        if (super.cleanup) super.cleanup();
+        if (this.root?.app?.inputMgr && this.inputReceiver) {
+            this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
+        }
         this.cleanupDynamicClickDetectors();
         this.visible = false;
-        this.dialog = null;
-        this.overlay = null;
     }
 
     show() {
         try {
-            if (this.dialog) return;
+            if (!this.background) {
+                this.createElements(this.parent || document.body);
+            }
 
             if (!this.isBlueprintsUnlocked()) {
                 this.showBlueprintsNotUnlocked();
                 return;
             }
 
-            const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
-            const updateBtnHtml = showUpdateBtn
-                ? `<button class="button styledButton bplib-btn-update" id="bplib-btn-update" style="background: #e65100; color: #fff;">Update (v${this.latestUpdateInfo.latestVersion})</button>`
-                : "";
-
-            this.dialog = new shapez.Dialog({
-                app: this.root.app,
-                title: "Blueprint Book",
-                contentHTML: `
-                    <div class="bplib-dialog-content">
-                        <div class="bplib-toolbar">
-                            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
-                            ${updateBtnHtml}
-                            <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
-                        </div>
-                        <div id="bplib-filter-tags" class="bplib-filterHeader"></div>
-                        
-                        <div id="bplib-grid" class="bplib-grid"></div>
-                    </div>
-                `,
-                buttons: [],
-                closeButton: true
-            });
-
-            this.root.hud.parts.dialogs.internalShowDialog(this.dialog);
-            
-            // Add required shapez CSS classes so our optionParent and dialogModsMod elements are styled correctly
-            this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog", "dialogUpgrades");
-            
             this.visible = true;
-            this.overlay = this.dialog.element || document.querySelector('.ingameDialog:last-child');
-            
-            this.bindEvents();
-            this.render();
+            if (this.root?.app?.inputMgr && this.inputReceiver) {
+                this.root.app.inputMgr.makeSureAttachedAndOnTop(this.inputReceiver);
+            }
 
-            this.dialog.closeRequested.add(() => {
-                this.dialog = null;
-                this.overlay = null;
-                this.visible = false;
-                this.cleanupDynamicClickDetectors();
-            });
+            this.render();
+            this.update();
         } catch (err) {
             console.error("Error in show():", err);
             this.notify("Error opening Blueprint Book. Check console.", NOTIFY.error);
@@ -479,10 +510,17 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     close() {
-        if (this.dialog && this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
-            this.root.hud.parts.dialogs.closeDialog(this.dialog);
+        this.visible = false;
+        if (this.root?.app?.inputMgr && this.inputReceiver) {
+            this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
         }
-        this.cleanup();
+        this.update();
+    }
+
+    update() {
+        if (this.domAttach) {
+            this.domAttach.update(this.visible);
+        }
     }
 
     notify(message, type) {
@@ -565,14 +603,36 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         try {
             this.cleanupDynamicClickDetectors();
             
-            const updateBtn = this.overlay.querySelector('#bplib-btn-update');
-            if (updateBtn) {
-                this.trackDynamicClick(updateBtn, () => {
-                    this.toggleUpdateDialog();
-                });
+            const toolbar = this.overlay ? this.overlay.querySelector('#bplib-toolbar') : null;
+            if (toolbar) {
+                let updateBtn = toolbar.querySelector('#bplib-btn-update');
+                const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
+                if (showUpdateBtn) {
+                    if (!updateBtn) {
+                        updateBtn = document.createElement('button');
+                        updateBtn.className = 'button styledButton bplib-btn-update';
+                        updateBtn.id = 'bplib-btn-update';
+                        updateBtn.style.background = '#e65100';
+                        updateBtn.style.color = '#fff';
+                        updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+                        const importBtn = toolbar.querySelector('#bplib-btn-import');
+                        if (importBtn && importBtn.nextSibling) {
+                            toolbar.insertBefore(updateBtn, importBtn.nextSibling);
+                        } else {
+                            toolbar.appendChild(updateBtn);
+                        }
+                    } else {
+                        updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+                    }
+                    this.trackDynamicClick(updateBtn, () => {
+                        this.toggleUpdateDialog();
+                    });
+                } else if (updateBtn) {
+                    updateBtn.remove();
+                }
             }
 
-            const tagsContainer = this.overlay.querySelector('#bplib-filter-tags');
+            const tagsContainer = this.overlay ? this.overlay.querySelector('#bplib-filter-tags') : null;
             if (tagsContainer) {
                 tagsContainer.innerHTML = '';
                 
@@ -692,7 +752,8 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     renderGrid() {
         try {
-            const grid = this.overlay.querySelector('#bplib-grid');
+            const grid = this.overlay ? this.overlay.querySelector('#bplib-grid') : null;
+            if (!grid) return;
             grid.innerHTML = '';
             let blueprints = BlueprintStore.getAll();
 
