@@ -87,7 +87,7 @@
         height: 32px;
         padding: 4px 10px;
         box-sizing: border-box;
-        flex: 1;
+        width: 250px;
     }
     .bplib-grid {
         flex: 1;
