@@ -21,6 +21,9 @@ export const CSS = `
     }
 
     /* --- DIALOG OVERRIDES --- */
+    #ingame_HUD_BlueprintLibrary {
+        z-index: 500;
+    }
     #ingame_HUD_BlueprintLibrary .dialogInner {
         width: 840px;
         max-width: 90vw;
