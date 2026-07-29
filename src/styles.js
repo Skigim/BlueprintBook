@@ -22,7 +22,7 @@ export const CSS = `
 
     /* --- DIALOG OVERRIDES --- */
     #ingame_HUD_BlueprintLibrary {
-        z-index: 500;
+        z-index: 430;
     }
     #ingame_HUD_BlueprintLibrary .dialogInner {
         width: 840px;
