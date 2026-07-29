@@ -10,7 +10,7 @@ This document provides deep technical details, architectural decisions, and API 
 - **Overlay & Keybinding Handling**: Implemented `isBlockingOverlay()` returning `this.visible`. Bound `InputReceiver("blueprintLibrary")` and `KeyActionMapper` to `general.back` and `ingame.menuClose` for native <kbd>Esc</kbd> and right-click menu closing.
 
 ### 2. Z-Index Layering Fix (`src/styles.js`)
-- **Stacking Context Alignment**: Reduced `#ingame_HUD_BlueprintLibrary` `z-index` from `500` to `430` (matching native `HUDStatistics`). This ensures `#ingame_HUD_ModalDialogs` (positioned at `z-index: 480` in native `main.scss`) cleanly overlay preview dialogs and import/export forms (`DialogWithForm` / `Dialog`) in front of the library window.
+- **Stacking Context Alignment**: Reduced `#ingame_HUD_BlueprintLibrary` `z-index` from `500` to `430`. Native `main.scss` dynamically calculates `z-index` via `@each $elem in $elements` (starting at 100 with +10 step), placing `ingame_HUD_Statistics` at `z-index: 410` and `ingame_HUD_ModalDialogs` at `z-index: 470`. Setting the library to `430` places it directly above regular HUD dialogs while ensuring modal dialogs (`z-index: 470`) like blueprint previews and import forms render cleanly on top.
 
 ### 3. Dynamic UI SCSS Scaling & Sizing Model (`src/styles.js`)
 - **Native `var(--ui-scale)` Dynamic Calc**: Converted static pixel declarations in toolbar elements to native `calc(PX * var(--ui-scale))` dynamic scaling formulas, preserving proportionality across high-DPI displays and user UI scale settings.
