@@ -294,25 +294,19 @@ export const CSS = `
         top: calc(210px * var(--ui-scale)) !important;
     }
 
-    /* --- PREVIEW DIALOG STYLES --- */
+    /* --- FORM & TEXTAREA STYLING --- */
     .bplib-textarea {
-        background: #eee;
-        color: #333438;
-        border: 1px solid #ccc;
+        background: #eee !important;
+        color: #333438 !important;
+        border: 0 !important;
+        border-radius: 6px;
+        padding: 10px 12px;
+        box-sizing: border-box;
         font-family: "GameFont", sans-serif;
     }
     .bplib-textarea::placeholder {
         color: #777;
         opacity: 0.8;
-    }
-    html[data-theme="dark"] .bplib-textarea {
-        background: rgba(0, 0, 0, 0.25);
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-    }
-    html[data-theme="dark"] .bplib-textarea::placeholder {
-        color: #aaa;
-        opacity: 0.7;
     }
 
     .dialogUpgrades .dialogInner .buttons {
