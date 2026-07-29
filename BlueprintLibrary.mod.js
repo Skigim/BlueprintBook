@@ -93,8 +93,16 @@
         padding: 0;
         margin: 0;
         align-items: center;
+        overflow-x: auto;
+        max-width: calc(420px * var(--ui-scale));
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    .bplib-filterHeader::-webkit-scrollbar {
+        display: none;
     }
     .bplib-filterHeader button {
+        flex-shrink: 0;
         height: calc(20px * var(--ui-scale));
         padding: calc(1px * var(--ui-scale)) calc(10px * var(--ui-scale));
         border: 0;
