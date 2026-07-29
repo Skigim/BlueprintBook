@@ -14,7 +14,7 @@ All notable changes to the **Blueprint Book** mod will be documented in this fil
 
 ### Bugs Squashed
 
-- **Z-Index Layering Overlap**: Fixed `z-index` layering conflict where the Blueprint Book window rendered above modal dialogs. Adjusted `z-index` to 430 so blueprint preview and edit dialogs pop up cleanly over the library window.
+- **Z-Index Layering Overlap**: Fixed a layering conflict where the Blueprint Book window rendered above modal dialogs. Adjusted window layering so blueprint preview and edit dialogs pop up cleanly over the library window.
 - **Dialog Input Theme Contrast**: Fixed contrast mismatch in custom textarea form elements by standardizing background (`#eee`) and text color (`#333438`) to match native shapez form inputs 1:1.
 - **DOMException on Update Button Injection**: Fixed a DOM hierarchy error during update button injection when toolbar action buttons are nested inside sub-containers.
 - **Memory Leak & Dynamic Click Detector Cleanup**: Fixed dynamic event listener accumulation by flushing stale click detectors prior to re-rendering grid cards.
