@@ -2,11 +2,22 @@
 
 All notable changes to the **Blueprint Book** mod will be documented in this file.
 
-## [1.0.3] - Unreleased
+## [1.0.3] - 2026-07-28
 
 ### Added
 
-- Initialized 1.0.3 development release.
+- **Native BaseHUDPart Architecture**: Converted the Blueprint Book main window into a native shapez `BaseHUDPart`, eliminating lazy dialog instantiation and integrating seamlessly with native game HUD lifecycle hooks.
+- **Statistics-Style Segmented Tab Bar**: Redesigned the tag filter header into a native segmented tab pill container (`ALL | PAINT | STACK | ...`) matching shapez's `HUDStatistics` panel.
+- **Horizontal Tag Scrolling**: Added smooth horizontal scrolling with hidden scrollbar tracks for tag filter tabs when managing large blueprint tag collections.
+- **Compact Import Button & Right-Aligned Toolbar**: Replaced the wide text import button with a compact blue `+` button positioned next to a right-aligned search bar.
+- **Developer Helper Tools**: Exposed `window.BlueprintBookDev` with version testing helpers (`setVersion`, `resetVersion`, `setDevMode`) for dev workflows.
+
+### Bugs Squashed
+
+- **Z-Index Layering Overlap**: Fixed `z-index` layering conflict where the Blueprint Book window rendered above modal dialogs. Adjusted `z-index` to 430 so blueprint preview and edit dialogs pop up cleanly over the library window.
+- **Dialog Input Theme Contrast**: Fixed contrast mismatch in custom textarea form elements by standardizing background (`#eee`) and text color (`#333438`) to match native shapez form inputs 1:1.
+- **DOMException on Update Button Injection**: Fixed a DOM hierarchy error during update button injection when toolbar action buttons are nested inside sub-containers.
+- **Memory Leak & Dynamic Click Detector Cleanup**: Fixed dynamic event listener accumulation by flushing stale click detectors prior to re-rendering grid cards.
 
 ## [1.0.2] - 2026-07-24
 

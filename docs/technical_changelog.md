@@ -2,6 +2,27 @@
 
 This document provides deep technical details, architectural decisions, and API contract changes in **Blueprint Book** for developers, modders, and contributors.
 
+## [1.0.3] - 2026-07-28
+
+### 1. Native `BaseHUDPart` Architectural Migration (`src/ui.js`)
+- **HUD Part Lifecycle Hooks**: Refactored `HUDBlueprintLibrary` to extend `shapez.BaseHUDPart`. Implemented native lifecycle methods `createElements(parent)`, `initialize()`, `show()`, `close()`, `update()`, and `cleanup()`.
+- **Persistent DOM Container & `DynamicDomAttach`**: Replaced lazy `shapez.Dialog` instantiation inside `show()` with `shapez.DynamicDomAttach(this.root, this.background, { attachClass: "visible" })`. The DOM container persists in `document.body` and toggles `.visible` dynamically without node allocation/destruction overhead on toggle cycles.
+- **Overlay & Keybinding Handling**: Implemented `isBlockingOverlay()` returning `this.visible`. Bound `InputReceiver("blueprintLibrary")` and `KeyActionMapper` to `general.back` and `ingame.menuClose` for native <kbd>Esc</kbd> and right-click menu closing.
+
+### 2. Z-Index Layering Fix (`src/styles.js`)
+- **Stacking Context Alignment**: Reduced `#ingame_HUD_BlueprintLibrary` `z-index` from `500` to `430` (matching native `HUDStatistics`). This ensures `#ingame_HUD_ModalDialogs` (positioned at `z-index: 480` in native `main.scss`) cleanly overlay preview dialogs and import/export forms (`DialogWithForm` / `Dialog`) in front of the library window.
+
+### 3. Dynamic UI SCSS Scaling & Sizing Model (`src/styles.js`)
+- **Native `var(--ui-scale)` Dynamic Calc**: Converted static pixel declarations in toolbar elements to native `calc(PX * var(--ui-scale))` dynamic scaling formulas, preserving proportionality across high-DPI displays and user UI scale settings.
+- **Content-Box Flow**: Switched tab buttons and inputs from `border-box` to native `box-sizing: content-box`, ensuring text height (`11px` / `14px`), line height (`18px`), and padding (`calc(1px * var(--ui-scale))` / `calc(10px * var(--ui-scale))`) stack identically to native `HUDStatistics` pill tabs (~36px rendered height).
+- **Horizontal Overflow Scroll**: Applied `overflow-x: auto`, `flex-shrink: 0`, `scrollbar-width: none`, and `::-webkit-scrollbar { display: none; }` to `.bplib-filterHeader` to support smooth horizontal scrolling for large tag collections.
+
+### 4. Form Textarea Theme Contrast Fix (`lib/ui.js`, `src/styles.js`)
+- **Native Input Contract Matching**: Removed hardcoded dark inline styles (`background: rgba(0,0,0,0.2)`) on custom textarea form elements (`createTextAreaFormElement`). Added `.bplib-textarea` matching native `FormElementInput` `#eee` background and `#333438` text color across all themes to match native `dialogs.scss` form input styling.
+
+### 5. DOMException Fix in Update Button Insertion (`src/ui.js`)
+- **Parent Container Traversal**: Fixed `toolbar.insertBefore(updateBtn, importBtn.nextSibling)` throwing `DOMException` when `importBtn` was nested inside `.bplib-toolbar-right` sub-container. Replaced parent lookup with `importBtn.parentNode.insertBefore(updateBtn, importBtn.nextSibling)`.
+
 ---
 
 ## [1.0.2] - 2026-07-24

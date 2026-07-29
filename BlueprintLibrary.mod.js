@@ -414,7 +414,7 @@
   // src/store.js
   function getActiveVersion(mod, forceIsDev = null) {
     const baseVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "1.0.3";
-    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(true) : Boolean(mod && mod.meta && mod.meta.isDev);
+    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(false) : Boolean(mod && mod.meta && mod.meta.isDev);
     if (isDev) {
       return `${baseVersion}-dev.${Date.now()}`;
     }
