@@ -60,10 +60,27 @@ export const CSS = `
     }
     .bplib-toolbar #bplib-search {
         margin: 0;
-        height: 32px;
-        padding: 4px 10px;
-        box-sizing: border-box;
+        height: 36px;
         width: 250px;
+        padding: 6px 12px;
+        box-sizing: border-box;
+        background: #eee;
+        color: #333438;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    .bplib-toolbar #bplib-search::placeholder {
+        color: #777;
+        opacity: 0.8;
+    }
+    html[data-theme="dark"] .bplib-toolbar #bplib-search {
+        background: #282c34;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    html[data-theme="dark"] .bplib-toolbar #bplib-search::placeholder {
+        color: #aaa;
+        opacity: 0.7;
     }
     .bplib-grid {
         flex: 1;
