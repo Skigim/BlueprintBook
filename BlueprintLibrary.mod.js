@@ -45,6 +45,18 @@
     }
 
     /* --- DIALOG OVERRIDES --- */
+    #ingame_HUD_BlueprintLibrary .dialogInner {
+        width: 840px;
+        max-width: 90vw;
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        background: #1b2836;
+        border-radius: 8px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        backdrop-filter: blur(4px);
+    }
     .dialogMods .dialogInner .content {
         width: 600px !important;
         max-width: 90vw;
@@ -1347,10 +1359,37 @@
     return true;
   }
   var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
-    createElements(parent) {
+    createElements(parent = document.body) {
       this.parent = parent;
       this.activeTagFilter = null;
       this.searchQuery = "";
+      const makeDiv = shapez && shapez.makeDiv || ((p, id, classes, text) => {
+        const el = document.createElement("div");
+        if (id) el.id = id;
+        if (classes && Array.isArray(classes)) classes.forEach((c) => el.classList.add(c));
+        if (text) el.textContent = text;
+        if (p) (p.element || p).appendChild(el);
+        return el;
+      });
+      this.background = makeDiv(parent, "ingame_HUD_BlueprintLibrary", ["ingameDialog"]);
+      this.dialogInner = makeDiv(this.background, null, ["dialogInner", "dialogMods", "optionChooserDialog", "dialogUpgrades"]);
+      this.title = makeDiv(this.dialogInner, null, ["title"], "Blueprint Book");
+      this.closeButton = makeDiv(this.title, null, ["closeButton"]);
+      if (typeof this.trackClicks === "function") {
+        this.trackClicks(this.closeButton, this.close);
+      }
+      if (typeof this.closeOnBackgroundClick === "function") {
+        this.closeOnBackgroundClick(this.background, this.close);
+      }
+      const toolbar = makeDiv(this.dialogInner, "bplib-toolbar", ["bplib-toolbar"]);
+      toolbar.innerHTML = `
+            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
+            <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
+        `;
+      this.filterHeader = makeDiv(this.dialogInner, "bplib-filter-tags", ["bplib-filterHeader"]);
+      this.gridContainer = makeDiv(this.dialogInner, "bplib-grid", ["bplib-grid"]);
+      this.overlay = this.dialogInner;
+      this.bindEvents();
     }
     bindEvents() {
       if (!this.overlay) return;
@@ -1368,9 +1407,16 @@
           e.stopPropagation();
         }, { passive: true });
       }
-      this.dialog.trackClicks(this.overlay.querySelector("#bplib-btn-import"), () => {
-        this.openImportDialog();
-      });
+      const importBtn = this.overlay.querySelector("#bplib-btn-import");
+      if (importBtn) {
+        if (typeof this.trackClicks === "function") {
+          this.trackClicks(importBtn, () => this.openImportDialog());
+        } else if (this.dialog && typeof this.dialog.trackClicks === "function") {
+          this.dialog.trackClicks(importBtn, () => this.openImportDialog());
+        } else {
+          importBtn.addEventListener("click", () => this.openImportDialog());
+        }
+      }
     }
     _showBlueprintFormDialog({ title, desc, defaults = {}, textareaId = "string", onSubmit }) {
       const nameInput = new shapez.FormElementInput({
@@ -1427,10 +1473,6 @@
           if (d && typeof d.cleanup === "function") {
             d.cleanup();
           }
-          if (this.clickDetectors) {
-            const index = this.clickDetectors.indexOf(d);
-            if (index >= 0) this.clickDetectors.splice(index, 1);
-          }
         }
         this.dynamicClickDetectors = [];
       }
@@ -1445,10 +1487,31 @@
       this.dynamicClickDetectors.push(detector);
     }
     initialize() {
+      if (!this.background) {
+        this.createElements(this.parent || document.body);
+      }
       this.visible = false;
       this.updateDialog = null;
       this.latestUpdateInfo = null;
+      if (shapez && shapez.DynamicDomAttach) {
+        this.domAttach = new shapez.DynamicDomAttach(this.root, this.background, {
+          attachClass: "visible"
+        });
+      }
+      if (shapez && shapez.InputReceiver && shapez.KeyActionMapper) {
+        this.inputReceiver = new shapez.InputReceiver("blueprintLibrary");
+        this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver);
+        if (shapez.KEYMAPPINGS) {
+          if (shapez.KEYMAPPINGS.general?.back) {
+            this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.general.back).add(this.close, this);
+          }
+          if (shapez.KEYMAPPINGS.ingame?.menuClose) {
+            this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.ingame.menuClose).add(this.close, this);
+          }
+        }
+      }
       registerNativeChangelogEntry();
+      this.close();
       this.checkUpdateOnce();
     }
     async checkUpdateOnce() {
@@ -1610,6 +1673,9 @@
         this.root.hud.parts.dialogs.showInfo(title, desc);
       }
     }
+    isBlockingOverlay() {
+      return Boolean(this.visible);
+    }
     handleSaveHotkey() {
       if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
       if (!this.isBlueprintsUnlocked()) {
@@ -1627,68 +1693,51 @@
     }
     handleToggleHotkey() {
       if (this.visible) {
-        if (this.dialog) this.dialog.closeRequested.dispatch();
+        this.close();
       } else {
         this.show();
       }
       return "stop_propagation";
     }
     cleanup() {
-      super.cleanup();
+      if (super.cleanup) super.cleanup();
+      if (this.root?.app?.inputMgr && this.inputReceiver) {
+        this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
+      }
       this.cleanupDynamicClickDetectors();
       this.visible = false;
-      this.dialog = null;
-      this.overlay = null;
     }
     show() {
       try {
-        if (this.dialog) return;
+        if (!this.background) {
+          this.createElements(this.parent || document.body);
+        }
         if (!this.isBlueprintsUnlocked()) {
           this.showBlueprintsNotUnlocked();
           return;
         }
-        const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
-        const updateBtnHtml = showUpdateBtn ? `<button class="button styledButton bplib-btn-update" id="bplib-btn-update" style="background: #e65100; color: #fff;">Update (v${this.latestUpdateInfo.latestVersion})</button>` : "";
-        this.dialog = new shapez.Dialog({
-          app: this.root.app,
-          title: "Blueprint Book",
-          contentHTML: `
-                    <div class="bplib-dialog-content">
-                        <div class="bplib-toolbar">
-                            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
-                            ${updateBtnHtml}
-                            <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
-                        </div>
-                        <div id="bplib-filter-tags" class="bplib-filterHeader"></div>
-                        
-                        <div id="bplib-grid" class="bplib-grid"></div>
-                    </div>
-                `,
-          buttons: [],
-          closeButton: true
-        });
-        this.root.hud.parts.dialogs.internalShowDialog(this.dialog);
-        this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog", "dialogUpgrades");
         this.visible = true;
-        this.overlay = this.dialog.element || document.querySelector(".ingameDialog:last-child");
-        this.bindEvents();
+        if (this.root?.app?.inputMgr && this.inputReceiver) {
+          this.root.app.inputMgr.makeSureAttachedAndOnTop(this.inputReceiver);
+        }
         this.render();
-        this.dialog.closeRequested.add(() => {
-          this.dialog = null;
-          this.overlay = null;
-          this.visible = false;
-          this.cleanupDynamicClickDetectors();
-        });
+        this.update();
       } catch (err) {
         console.error("Error in show():", err);
         this.notify("Error opening Blueprint Book. Check console.", NOTIFY.error);
       }
     }
     close() {
-      if (this.dialog && this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
-        this.root.hud.parts.dialogs.closeDialog(this.dialog);
+      this.visible = false;
+      if (this.root?.app?.inputMgr && this.inputReceiver) {
+        this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
       }
-      this.cleanup();
+      this.update();
+    }
+    update() {
+      if (this.domAttach) {
+        this.domAttach.update(this.visible);
+      }
     }
     notify(message, type) {
       if (this.root && this.root.hud && this.root.hud.signals && this.root.hud.signals.notification) {
@@ -1760,13 +1809,39 @@
     render() {
       try {
         this.cleanupDynamicClickDetectors();
-        const updateBtn = this.overlay.querySelector("#bplib-btn-update");
-        if (updateBtn) {
-          this.trackDynamicClick(updateBtn, () => {
-            this.toggleUpdateDialog();
-          });
+        const searchInput = this.overlay ? this.overlay.querySelector("#bplib-search") : null;
+        if (searchInput && searchInput.value !== (this.searchQuery || "")) {
+          searchInput.value = this.searchQuery || "";
         }
-        const tagsContainer = this.overlay.querySelector("#bplib-filter-tags");
+        const toolbar = this.overlay ? this.overlay.querySelector("#bplib-toolbar") : null;
+        if (toolbar) {
+          let updateBtn = toolbar.querySelector("#bplib-btn-update");
+          const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
+          if (showUpdateBtn) {
+            if (!updateBtn) {
+              updateBtn = document.createElement("button");
+              updateBtn.className = "button styledButton bplib-btn-update";
+              updateBtn.id = "bplib-btn-update";
+              updateBtn.style.background = "#e65100";
+              updateBtn.style.color = "#fff";
+              updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+              const importBtn = toolbar.querySelector("#bplib-btn-import");
+              if (importBtn && importBtn.nextSibling) {
+                toolbar.insertBefore(updateBtn, importBtn.nextSibling);
+              } else {
+                toolbar.appendChild(updateBtn);
+              }
+            } else {
+              updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+            }
+            this.trackDynamicClick(updateBtn, () => {
+              this.toggleUpdateDialog();
+            });
+          } else if (updateBtn) {
+            updateBtn.remove();
+          }
+        }
+        const tagsContainer = this.overlay ? this.overlay.querySelector("#bplib-filter-tags") : null;
         if (tagsContainer) {
           tagsContainer.innerHTML = "";
           const allBtn = document.createElement("button");
@@ -1870,7 +1945,8 @@
     }
     renderGrid() {
       try {
-        const grid = this.overlay.querySelector("#bplib-grid");
+        const grid = this.overlay ? this.overlay.querySelector("#bplib-grid") : null;
+        if (!grid) return;
         grid.innerHTML = "";
         let blueprints = BlueprintStore.getAll();
         if (this.searchQuery) {
