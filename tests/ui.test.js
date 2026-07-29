@@ -1054,6 +1054,110 @@ describe('BaseHUDPart Lifecycle & isBlockingOverlay Specs', () => {
     });
 });
 
+describe('Task 3: Persistent DOM Interactions & handleToggleHotkey Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockRoot = {
+            app: {
+                inputMgr: {
+                    makeSureAttachedAndOnTop: vi.fn(),
+                    makeSureDetached: vi.fn()
+                }
+            },
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: { availableTags: ['factory', 'belt'], blueprints: [] }, saveSettings: vi.fn() });
+
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.createElements(document.createElement('div'));
+        hudLibrary.initialize();
+    });
+
+    it('persists searchQuery and activeTagFilter across show() -> search -> close() -> show() open/close cycles', () => {
+        hudLibrary.show();
+
+        const searchInput = hudLibrary.overlay.querySelector('#bplib-search');
+        searchInput.value = 'balancer';
+        searchInput.dispatchEvent(new Event('input'));
+
+        hudLibrary.activeTagFilter = 'factory';
+        hudLibrary.render();
+
+        expect(hudLibrary.searchQuery).toBe('balancer');
+        expect(hudLibrary.activeTagFilter).toBe('factory');
+
+        // Close the Blueprint Book
+        hudLibrary.close();
+        expect(hudLibrary.visible).toBe(false);
+
+        // Reopen the Blueprint Book
+        hudLibrary.show();
+        expect(hudLibrary.visible).toBe(true);
+
+        // Verify searchQuery and activeTagFilter state persists
+        expect(hudLibrary.searchQuery).toBe('balancer');
+        expect(hudLibrary.activeTagFilter).toBe('factory');
+        expect(hudLibrary.overlay.querySelector('#bplib-search').value).toBe('balancer');
+    });
+
+    it('synchronizes search input DOM value with searchQuery during render()', () => {
+        hudLibrary.show();
+        hudLibrary.searchQuery = 'machinery';
+        hudLibrary.render();
+
+        const searchInput = hudLibrary.overlay.querySelector('#bplib-search');
+        expect(searchInput.value).toBe('machinery');
+    });
+
+
+    it('handleToggleHotkey() toggles between show() and close()', () => {
+        const showSpy = vi.spyOn(hudLibrary, 'show');
+        const closeSpy = vi.spyOn(hudLibrary, 'close');
+
+        expect(hudLibrary.visible).toBe(false);
+
+        // First press when closed -> calls show()
+        const res1 = hudLibrary.handleToggleHotkey();
+        expect(res1).toBe('stop_propagation');
+        expect(showSpy).toHaveBeenCalledTimes(1);
+        expect(closeSpy).not.toHaveBeenCalled();
+        expect(hudLibrary.visible).toBe(true);
+
+        // Second press when open -> calls close()
+        const res2 = hudLibrary.handleToggleHotkey();
+        expect(res2).toBe('stop_propagation');
+        expect(closeSpy).toHaveBeenCalledTimes(1);
+        expect(hudLibrary.visible).toBe(false);
+    });
+
+    it('render() invokes cleanupDynamicClickDetectors() before re-populating grid cards', () => {
+        const cleanupSpy = vi.spyOn(hudLibrary, 'cleanupDynamicClickDetectors');
+
+        hudLibrary.show();
+        expect(cleanupSpy).toHaveBeenCalled();
+
+        cleanupSpy.mockClear();
+        hudLibrary.render();
+        expect(cleanupSpy).toHaveBeenCalled();
+    });
+});
+
+
 
 
 

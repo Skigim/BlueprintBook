@@ -602,7 +602,12 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     render() {
         try {
             this.cleanupDynamicClickDetectors();
-            
+
+            const searchInput = this.overlay ? this.overlay.querySelector('#bplib-search') : null;
+            if (searchInput && searchInput.value !== (this.searchQuery || "")) {
+                searchInput.value = this.searchQuery || "";
+            }
+
             const toolbar = this.overlay ? this.overlay.querySelector('#bplib-toolbar') : null;
             if (toolbar) {
                 let updateBtn = toolbar.querySelector('#bplib-btn-update');
