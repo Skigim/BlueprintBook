@@ -3,7 +3,7 @@ export function getActiveVersion(mod, forceIsDev = null) {
     const isDev = forceIsDev !== null
         ? Boolean(forceIsDev)
         : (typeof IS_DEV !== "undefined" ? Boolean(IS_DEV) : Boolean(mod && mod.meta && mod.meta.isDev));
-    if (isDev && mod && mod.settings && mod.settings.devForceFreshUpdate === true) {
+    if (isDev) {
         return `${baseVersion}-dev.${Date.now()}`;
     }
     return baseVersion;
@@ -18,10 +18,6 @@ export const BlueprintStore = {
 
         if (!mod.settings || typeof mod.settings !== "object") {
             mod.settings = {};
-        }
-
-        if (typeof mod.settings.devForceFreshUpdate !== "boolean") {
-            mod.settings.devForceFreshUpdate = false;
         }
 
         if (!Array.isArray(mod.settings.blueprints)) {

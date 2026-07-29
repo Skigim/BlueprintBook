@@ -173,22 +173,6 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         this.dynamicClickDetectors.push(detector);
     }
 
-    isDevMode() {
-        return typeof IS_DEV !== "undefined" ? Boolean(IS_DEV) : Boolean(METADATA.isDev);
-    }
-
-    toggleDevFreshUpdate() {
-        if (BlueprintStore.mod && BlueprintStore.mod.settings) {
-            BlueprintStore.mod.settings.devForceFreshUpdate = !BlueprintStore.mod.settings.devForceFreshUpdate;
-        }
-        BlueprintStore.persist();
-        const stateStr = BlueprintStore.mod?.settings?.devForceFreshUpdate ? "ENABLED" : "DISABLED";
-        this.notify(`[DEV] Fresh update on boot: ${stateStr}`, NOTIFY.info);
-        if (this.visible) {
-            this.render();
-        }
-    }
-
     initialize() {
         this.visible = false;
         this.updateDialog = null;
@@ -452,10 +436,6 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                 ? `<button class="button styledButton bplib-btn-update" id="bplib-btn-update" style="background: #e65100; color: #fff;">Update (v${this.latestUpdateInfo.latestVersion})</button>`
                 : "";
 
-            const devBtnHtml = this.isDevMode()
-                ? `<button class="button styledButton bplib-btn-dev-toggle" id="bplib-btn-dev-toggle" style="background: ${BlueprintStore.mod?.settings?.devForceFreshUpdate ? '#2e7d32' : '#424242'}; color: #fff;">DEV: Fresh Update [${BlueprintStore.mod?.settings?.devForceFreshUpdate ? 'ON' : 'OFF'}]</button>`
-                : "";
-
             this.dialog = new shapez.Dialog({
                 app: this.root.app,
                 title: "Blueprint Book",
@@ -464,7 +444,6 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                         <div class="bplib-toolbar">
                             <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
                             ${updateBtnHtml}
-                            ${devBtnHtml}
                             <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
                         </div>
                         <div id="bplib-filter-tags" class="bplib-filterHeader"></div>
@@ -590,13 +569,6 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             if (updateBtn) {
                 this.trackDynamicClick(updateBtn, () => {
                     this.toggleUpdateDialog();
-                });
-            }
-
-            const devToggleBtn = this.overlay.querySelector('#bplib-btn-dev-toggle');
-            if (devToggleBtn) {
-                this.trackDynamicClick(devToggleBtn, () => {
-                    this.toggleDevFreshUpdate();
                 });
             }
 

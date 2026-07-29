@@ -18,8 +18,7 @@
       lastSeenVersion: "",
       skippedVersion: "",
       deletedValues: [],
-      deletedNames: [],
-      devForceFreshUpdate: false
+      deletedNames: []
     }
   };
 
@@ -304,8 +303,8 @@
   // src/store.js
   function getActiveVersion(mod, forceIsDev = null) {
     const baseVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "1.0.3";
-    const isDev2 = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(false) : Boolean(mod && mod.meta && mod.meta.isDev);
-    if (isDev2 && mod && mod.settings && mod.settings.devForceFreshUpdate === true) {
+    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(true) : Boolean(mod && mod.meta && mod.meta.isDev);
+    if (isDev) {
       return `${baseVersion}-dev.${Date.now()}`;
     }
     return baseVersion;
@@ -317,9 +316,6 @@
       this.mod = mod;
       if (!mod.settings || typeof mod.settings !== "object") {
         mod.settings = {};
-      }
-      if (typeof mod.settings.devForceFreshUpdate !== "boolean") {
-        mod.settings.devForceFreshUpdate = false;
       }
       if (!Array.isArray(mod.settings.blueprints)) {
         mod.settings.blueprints = [];
@@ -1447,20 +1443,6 @@
       }
       this.dynamicClickDetectors.push(detector);
     }
-    isDevMode() {
-      return true ? Boolean(false) : Boolean(METADATA.isDev);
-    }
-    toggleDevFreshUpdate() {
-      if (BlueprintStore.mod && BlueprintStore.mod.settings) {
-        BlueprintStore.mod.settings.devForceFreshUpdate = !BlueprintStore.mod.settings.devForceFreshUpdate;
-      }
-      BlueprintStore.persist();
-      const stateStr = BlueprintStore.mod?.settings?.devForceFreshUpdate ? "ENABLED" : "DISABLED";
-      this.notify(`[DEV] Fresh update on boot: ${stateStr}`, NOTIFY.info);
-      if (this.visible) {
-        this.render();
-      }
-    }
     initialize() {
       this.visible = false;
       this.updateDialog = null;
@@ -1666,7 +1648,6 @@
         }
         const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
         const updateBtnHtml = showUpdateBtn ? `<button class="button styledButton bplib-btn-update" id="bplib-btn-update" style="background: #e65100; color: #fff;">Update (v${this.latestUpdateInfo.latestVersion})</button>` : "";
-        const devBtnHtml = this.isDevMode() ? `<button class="button styledButton bplib-btn-dev-toggle" id="bplib-btn-dev-toggle" style="background: ${BlueprintStore.mod?.settings?.devForceFreshUpdate ? "#2e7d32" : "#424242"}; color: #fff;">DEV: Fresh Update [${BlueprintStore.mod?.settings?.devForceFreshUpdate ? "ON" : "OFF"}]</button>` : "";
         this.dialog = new shapez.Dialog({
           app: this.root.app,
           title: "Blueprint Book",
@@ -1675,7 +1656,6 @@
                         <div class="bplib-toolbar">
                             <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
                             ${updateBtnHtml}
-                            ${devBtnHtml}
                             <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
                         </div>
                         <div id="bplib-filter-tags" class="bplib-filterHeader"></div>
@@ -1783,12 +1763,6 @@
         if (updateBtn) {
           this.trackDynamicClick(updateBtn, () => {
             this.toggleUpdateDialog();
-          });
-        }
-        const devToggleBtn = this.overlay.querySelector("#bplib-btn-dev-toggle");
-        if (devToggleBtn) {
-          this.trackDynamicClick(devToggleBtn, () => {
-            this.toggleDevFreshUpdate();
           });
         }
         const tagsContainer = this.overlay.querySelector("#bplib-filter-tags");
@@ -2061,19 +2035,5 @@
       );
     }
   };
-  var isDev = true ? Boolean(false) : Boolean(METADATA.isDev);
-  if (isDev) {
-    window.BlueprintBookDev = {
-      toggleFreshUpdate: () => {
-        if (BlueprintStore.mod && BlueprintStore.mod.settings) {
-          BlueprintStore.mod.settings.devForceFreshUpdate = !BlueprintStore.mod.settings.devForceFreshUpdate;
-          BlueprintStore.persist();
-          return BlueprintStore.mod.settings.devForceFreshUpdate;
-        }
-        return false;
-      },
-      isFreshUpdateEnabled: () => Boolean(BlueprintStore.mod?.settings?.devForceFreshUpdate)
-    };
-  }
   window.$shapez_registerMod(BlueprintLibraryMod, METADATA);
 })();

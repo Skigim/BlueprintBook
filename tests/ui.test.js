@@ -906,7 +906,7 @@ describe('registerNativeChangelogEntry', () => {
     });
 });
 
-describe('Dev Version Change Toggle - UI Features', () => {
+describe('Dev Version Change - Dynamic Boot Check', () => {
     let mockRoot;
     let hudLibrary;
     let mockDialogElem;
@@ -941,7 +941,7 @@ describe('Dev Version Change Toggle - UI Features', () => {
         mockRoot = {
             app: {
                 modLoader: {
-                    mods: [{ metadata: { id: 'bp-library', isDev: true }, meta: { version: METADATA.version, isDev: true }, settings: { devForceFreshUpdate: false, availableTags: [], blueprints: [] } }]
+                    mods: [{ metadata: { id: 'bp-library', isDev: true }, meta: { version: METADATA.version, isDev: true }, settings: { availableTags: [], blueprints: [] } }]
                 }
             },
             hubGoals: {
@@ -959,7 +959,7 @@ describe('Dev Version Change Toggle - UI Features', () => {
 
         const { HUDBlueprintLibrary } = await import('../src/ui.js');
         const { BlueprintStore } = await import('../src/store.js');
-        BlueprintStore.init({ settings: { devForceFreshUpdate: false, availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
+        BlueprintStore.init({ settings: { availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
         BlueprintStore.mod = mockRoot.app.modLoader.mods[0];
 
         hudLibrary = new HUDBlueprintLibrary(mockRoot);
@@ -969,39 +969,9 @@ describe('Dev Version Change Toggle - UI Features', () => {
         if (hudLibrary) hudLibrary.cleanup();
     });
 
-    it('renders dev toggle button in toolbar when isDevMode() returns true and handles click', async () => {
+    it('checkUpdateOnce uses getActiveVersion so isDev = true triggers welcome dialog on boot', async () => {
         const { BlueprintStore } = await import('../src/store.js');
-        vi.spyOn(hudLibrary, 'isDevMode').mockReturnValue(true);
-
-        hudLibrary.show();
-
-        const devBtn = hudLibrary.overlay.querySelector('#bplib-btn-dev-toggle');
-        expect(devBtn).not.toBeNull();
-        expect(devBtn.textContent).toContain('DEV: Fresh Update [OFF]');
-
-        // Click the dev toggle button
-        devBtn.click();
-
-        expect(BlueprintStore.mod.settings.devForceFreshUpdate).toBe(true);
-        expect(mockRoot.hud.signals.notification.dispatch).toHaveBeenCalledWith(
-            '[DEV] Fresh update on boot: ENABLED',
-            expect.anything()
-        );
-    });
-
-    it('omits dev toggle button when isDevMode() returns false', () => {
-        vi.spyOn(hudLibrary, 'isDevMode').mockReturnValue(false);
-
-        hudLibrary.show();
-
-        const devBtn = hudLibrary.overlay.querySelector('#bplib-btn-dev-toggle');
-        expect(devBtn).toBeNull();
-    });
-
-    it('checkUpdateOnce uses getActiveVersion so devForceFreshUpdate = true triggers welcome dialog on boot', async () => {
-        const { BlueprintStore } = await import('../src/store.js');
-        mockRoot.app.modLoader.mods[0].settings.devForceFreshUpdate = true;
-        BlueprintStore.init({ settings: { devForceFreshUpdate: true, availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
+        BlueprintStore.init({ settings: { availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
         BlueprintStore.mod = mockRoot.app.modLoader.mods[0];
         BlueprintStore.setLastSeenVersion(METADATA.version);
 
@@ -1014,62 +984,6 @@ describe('Dev Version Change Toggle - UI Features', () => {
         const calledVersion = hudLibrary.showWelcomeDialog.mock.calls[0][0];
         expect(calledVersion).toContain(`${METADATA.version}-dev.`);
         expect(BlueprintStore.getLastSeenVersion()).toBe(calledVersion);
-    });
-});
-
-describe('window.BlueprintBookDev Global Helper', () => {
-    beforeEach(() => {
-        vi.resetModules();
-        delete window.BlueprintBookDev;
-        delete global.IS_DEV;
-        window.$shapez_registerMod = vi.fn();
-    });
-
-    it('attaches BlueprintBookDev window helper when in dev mode and toggles devForceFreshUpdate', async () => {
-        global.IS_DEV = true;
-        const { BlueprintStore } = await import('../src/store.js');
-        const mockMod = {
-            settings: { devForceFreshUpdate: false }
-        };
-        BlueprintStore.mod = mockMod;
-        BlueprintStore.persist = vi.fn();
-
-        await import('../src/index.js');
-
-        expect(window.BlueprintBookDev).toBeDefined();
-        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(false);
-
-        const newStatus = window.BlueprintBookDev.toggleFreshUpdate();
-        expect(newStatus).toBe(true);
-        expect(mockMod.settings.devForceFreshUpdate).toBe(true);
-        expect(BlueprintStore.persist).toHaveBeenCalled();
-        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(true);
-
-        const toggledBack = window.BlueprintBookDev.toggleFreshUpdate();
-        expect(toggledBack).toBe(false);
-        expect(mockMod.settings.devForceFreshUpdate).toBe(false);
-        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(false);
-    });
-
-    it('returns false when BlueprintStore.mod or settings is undefined', async () => {
-        global.IS_DEV = true;
-        const { BlueprintStore } = await import('../src/store.js');
-        BlueprintStore.mod = null;
-
-        await import('../src/index.js');
-
-        expect(window.BlueprintBookDev).toBeDefined();
-        expect(window.BlueprintBookDev.isFreshUpdateEnabled()).toBe(false);
-
-        const status = window.BlueprintBookDev.toggleFreshUpdate();
-        expect(status).toBe(false);
-    });
-
-    it('does not attach BlueprintBookDev when isDev is false', async () => {
-        global.IS_DEV = false;
-        await import('../src/index.js');
-
-        expect(window.BlueprintBookDev).toBeUndefined();
     });
 });
 
