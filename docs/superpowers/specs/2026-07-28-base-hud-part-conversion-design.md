@@ -10,10 +10,11 @@ In `shapez.io`, full-featured HUD overlay windows (`HUDStatistics`, `HUDWaypoint
 
 Instead of dynamically instantiating `new shapez.Dialog(...)` on demand (which created and destroyed transient DOM trees):
 1. `HUDBlueprintLibrary` creates a persistent DOM tree during `createElements(parent)`.
-2. Uses `shapez.DynamicDomAttach` with class `"visible"` to handle DOM attachment, animations, and visibility toggling.
-3. Overrides `isBlockingOverlay()` (`return this.visible;`) so that `hud.hasBlockingOverlayOpen()` correctly suppresses underlying game world interaction (building placement, movement, hotkeys) while open.
-4. Manages native input focus via `shapez.InputReceiver("blueprintLibrary")` and `shapez.KeyActionMapper`.
-5. Secondary transient alerts and form prompts (*Import Blueprint*, *Edit Blueprint*, *Welcome Dialog*, *Update Available*) continue using `shapez.Dialog` / `shapez.DialogWithForm` to display popups on top of the HUD part.
+2. Uses `shapez.DynamicDomAttach` with class `"visible"` to handle DOM attachment, native entry animations, and visibility toggling (`appendChild` / `removeChild`).
+3. Inherits native modal chrome from `.ingameDialog` and uses `this.closeOnBackgroundClick(this.background, this.close)` for background backdrop dismissal.
+4. Overrides `isBlockingOverlay()` (`return this.visible;`) so that `hud.hasBlockingOverlayOpen()` correctly suppresses underlying game world interaction (building placement, movement, hotkeys) while open.
+5. Manages native input focus via `shapez.InputReceiver("blueprintLibrary")` and `shapez.KeyActionMapper`.
+6. Secondary transient alerts and form prompts (*Import Blueprint*, *Edit Blueprint*, *Welcome Dialog*, *Update Available*) continue using `shapez.Dialog` / `shapez.DialogWithForm` to display popups on top of the HUD part.
 
 ### 2. Persistent DOM Lifetime Model (Refactoring Blast Radius)
 Moving from transient dialogs to a persistent `BaseHUDPart` changes the underlying DOM assumption:
@@ -38,6 +39,7 @@ Moving from transient dialogs to a persistent `BaseHUDPart` changes the underlyi
   - Creates `this.title = makeDiv(this.dialogInner, null, ["title"], "Blueprint Book")`.
   - Creates `this.closeButton = makeDiv(this.title, null, ["closeButton"])`.
   - Calls `this.trackClicks(this.closeButton, this.close)`.
+  - Calls `this.closeOnBackgroundClick(this.background, this.close)` to enable backdrop click dismissal natively.
   - Builds static layout inside `this.dialogInner`:
     - Toolbar container (`#bplib-toolbar`)
     - Search input (`#bplib-search`)
@@ -53,9 +55,12 @@ Moving from transient dialogs to a persistent `BaseHUDPart` changes the underlyi
   - Instantiates `this.domAttach = new shapez.DynamicDomAttach(this.root, this.background, { attachClass: "visible" })`.
   - Sets up `this.inputReceiver = new shapez.InputReceiver("blueprintLibrary")`.
   - Sets up `this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver)`.
-  - Maps `KEYMAPPINGS.general.back`, `KEYMAPPINGS.ingame.menuClose`, and toggle hotkeys to `this.close`.
+  - Maps `KEYMAPPINGS.general.back` and `KEYMAPPINGS.ingame.menuClose` to `this.close`.
   - Sets initial state `this.visible = false`.
   - Calls `this.close()` and triggers initial update check (`this.checkUpdateOnce()`).
+
+- `handleToggleHotkey()`:
+  - Toggles HUD part state: if `this.visible` is `true`, calls `this.close()`; if `false`, calls `this.show()`.
 
 - `isBlockingOverlay()`:
   - Returns `this.visible;` (Required by `hud.hasBlockingOverlayOpen()` to suppress background game interaction).
@@ -84,28 +89,10 @@ Moving from transient dialogs to a persistent `BaseHUDPart` changes the underlyi
 
 ## Styling Specs (`src/styles.js`)
 
-CSS definitions for `.ingame_HUD_BlueprintLibrary`:
+Mirroring `#ingame_HUD_Statistics`, custom rules scope only mod-specific `.dialogInner` dimensions and styling under `#ingame_HUD_BlueprintLibrary` (letting native `.ingameDialog` handle container positioning, background tinting, and keyframe animations):
+
 ```css
-.ingame_HUD_BlueprintLibrary {
-    position: absolute;
-    inset: 0;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease-in-out;
-}
-
-.ingame_HUD_BlueprintLibrary.visible {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.ingame_HUD_BlueprintLibrary .dialogInner {
+#ingame_HUD_BlueprintLibrary .dialogInner {
     width: 840px;
     max-width: 90vw;
     max-height: 85vh;
@@ -115,6 +102,7 @@ CSS definitions for `.ingame_HUD_BlueprintLibrary`:
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     overflow: hidden;
+    backdrop-filter: blur(4px);
 }
 ```
 
@@ -123,10 +111,10 @@ CSS definitions for `.ingame_HUD_BlueprintLibrary`:
 ## Verification & Testing Plan
 
 ### Automated Unit Tests (`tests/ui.test.js`)
-1. **Persistent Elements Creation**: Verify `createElements` builds `.ingame_HUD_BlueprintLibrary` ONCE at HUD init.
+1. **Persistent Elements Creation**: Verify `createElements` builds `#ingame_HUD_BlueprintLibrary` ONCE at HUD init.
 2. **`isBlockingOverlay` Verification**: Verify `isBlockingOverlay()` returns `true` when `visible` is `true`, and `false` when `visible` is `false`.
 3. **Visibility Toggling**: Verify `show()` and `close()` update `this.visible` and toggle `.visible` class via `DynamicDomAttach`.
-4. **Input Receiver**: Verify `inputMgr.makeSureAttachedAndOnTop` and `makeSureDetached` are called on `show()` / `close()`.
+4. **Input Receiver & Keybindings**: Verify `inputMgr.makeSureAttachedAndOnTop` and `makeSureDetached` are called on `show()` / `close()`, and `handleToggleHotkey` toggles state.
 5. **Open → Close → Reopen Cycle**: Verify opening, performing search/tag filter, closing, and reopening operates cleanly against persistent DOM without leaking click detectors or failing element queries.
 6. **Full Test Suite**: Ensure all existing unit tests pass without regression.
 
