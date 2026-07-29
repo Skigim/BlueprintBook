@@ -14,10 +14,10 @@ All notable changes to the **Blueprint Book** mod will be documented in this fil
 
 ### Bugs Squashed
 
-- **Z-Index Layering Overlap**: Fixed a layering conflict where the Blueprint Book window rendered above modal dialogs. Adjusted window layering so blueprint preview and edit dialogs pop up cleanly over the library window.
-- **Dialog Input Theme Contrast**: Fixed contrast mismatch in custom textarea form elements by standardizing background (`#eee`) and text color (`#333438`) to match native shapez form inputs 1:1.
-- **DOMException on Update Button Injection**: Fixed a DOM hierarchy error during update button injection when toolbar action buttons are nested inside sub-containers.
-- **Memory Leak & Dynamic Click Detector Cleanup**: Fixed dynamic event listener accumulation by flushing stale click detectors prior to re-rendering grid cards.
+- **Library Card Progression Lock**: Fixed an issue where several buildings were not properly progression-locked from the library card view, despite being locked in the preview dialog.
+- **Rapid Blueprint Deletion Sync**: Fixed an issue where rapidly deleting multiple blueprints could require multiple click attempts while the database file synchronized.
+- **Save Hotkey (Ctrl+P) Triggers**: Fixed `Ctrl+P` hotkey saving so copying a new blueprint from the world properly triggers a new library save even if it does not yet exist in the library.
+- **Deleted Migrated Blueprint Resurfacing**: Fixed version migration tracking so deleted migrated blueprints no longer resurface when updating to a new version of the mod.
 
 ## [1.0.2] - 2026-07-24
 
