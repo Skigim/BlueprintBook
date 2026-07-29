@@ -21,6 +21,18 @@ export const CSS = `
     }
 
     /* --- DIALOG OVERRIDES --- */
+    #ingame_HUD_BlueprintLibrary .dialogInner {
+        width: 840px;
+        max-width: 90vw;
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        background: #1b2836;
+        border-radius: 8px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        backdrop-filter: blur(4px);
+    }
     .dialogMods .dialogInner .content {
         width: 600px !important;
         max-width: 90vw;

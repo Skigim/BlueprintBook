@@ -33,6 +33,11 @@ describe('styles.js', () => {
         expect(CSS).toMatch(/\.button\.styledButton\.disabled,?\s*button\.styledButton:disabled,?\s*button\.styledButton\.disabled\s*\{[^}]*opacity:\s*0\.4\s*!important;/);
         expect(CSS).toMatch(/\.button\.styledButton\.disabled,?\s*button\.styledButton:disabled,?\s*button\.styledButton\.disabled\s*\{[^}]*cursor:\s*not-allowed\s*!important;/);
     });
+
+    it('defines scoped #ingame_HUD_BlueprintLibrary .dialogInner rules', () => {
+        expect(CSS).toContain('#ingame_HUD_BlueprintLibrary .dialogInner');
+        expect(CSS).toMatch(/#ingame_HUD_BlueprintLibrary\s+\.dialogInner\s*\{[^}]*width:\s*840px;/);
+    });
 });
 
 
