@@ -88,11 +88,12 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
         const toolbar = makeDiv(this.dialogInner, "bplib-toolbar", ["bplib-toolbar"]);
         toolbar.innerHTML = `
-            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
+            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import" title="Import Blueprint">+</button>
+            <div class="bplib-filterHeader" id="bplib-filter-tags"></div>
             <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
         `;
 
-        this.filterHeader = makeDiv(this.dialogInner, "bplib-filter-tags", ["bplib-filterHeader"]);
+        this.filterHeader = toolbar.querySelector('#bplib-filter-tags');
         this.gridContainer = makeDiv(this.dialogInner, "bplib-grid", ["bplib-grid"]);
 
         this.overlay = this.dialogInner;

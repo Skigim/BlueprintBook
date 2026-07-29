@@ -79,19 +79,98 @@
         max-height: 800px;
         pointer-events: auto;
     }
+    /* --- TOOLBAR & IMPORT BUTTON --- */
     .bplib-toolbar {
-        display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+        align-items: center;
     }
-    .bplib-toolbar #bplib-search {
+    .bplib-toolbar .bplib-btn-import {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        padding: 0 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #4a97df !important;
+        color: #ffffff !important;
+        font-size: 20px;
+        font-weight: bold;
+        border: 0;
+        border-radius: 4px;
+        cursor: pointer;
+        box-shadow: none;
+        line-height: 1;
+        transition: background-color 0.12s ease-in-out;
+    }
+    .bplib-toolbar .bplib-btn-import:hover {
+        background-color: #3b82c4 !important;
+    }
+
+    /* --- STATISTICS TABS STYLE FILTER HEADER --- */
+    .bplib-filterHeader {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 6px;
+        padding: 2px;
+        height: 32px;
+        box-sizing: border-box;
         margin: 0;
-        height: 36px;
-        width: 250px;
-        padding: 6px 12px;
+    }
+    html[data-theme="dark"] .bplib-filterHeader {
+        background: rgba(0, 0, 0, 0.35);
+    }
+    .bplib-filterHeader button {
+        height: 28px;
+        padding: 0 12px;
+        border: 0;
+        box-shadow: none;
+        min-width: 36px;
+        color: #888;
+        background: transparent;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-family: "GameFont", sans-serif;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        opacity: 0.7;
+    }
+    .bplib-filterHeader button:hover {
+        color: #fff;
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.08);
+    }
+    .bplib-filterHeader button.active {
+        color: #ffffff !important;
+        background: #535b6a !important;
+        opacity: 1;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    html[data-theme="dark"] .bplib-filterHeader button.active {
+        background: #626b7c !important;
+    }
+
+    /* --- SEARCH BAR (FAR RIGHT) --- */
+    .bplib-toolbar #bplib-search {
+        margin-left: auto;
+        height: 32px;
+        width: 220px;
+        padding: 4px 10px;
         box-sizing: border-box;
         background: #eee;
         color: #333438;
         border: 1px solid #ccc;
         border-radius: 4px;
+        font-size: 13px;
     }
     .bplib-toolbar #bplib-search::placeholder {
         color: #777;
@@ -116,34 +195,6 @@
         gap: 10px;
         pointer-events: auto;
     }
-
-    /* --- STATISTICS: TAGS FILTER HEADER --- */
-    .bplib-filterHeader {
-        display: flex;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
-    }
-    .bplib-filterHeader button {
-        height: 20px;
-        padding: 1px 10px;
-        border: 0;
-        box-shadow: none;
-        min-width: 30px;
-        color: #fff;
-        opacity: 0.25;
-        background: rgba(255,255,255,0.1);
-        border-radius: 0;
-        font-size: 11px;
-        font-family: "GameFont", sans-serif;
-        cursor: pointer;
-    }
-    html[data-theme="dark"] .bplib-filterHeader button {
-        background: #474b58;
-    }
-    .bplib-filterHeader button:hover { opacity: 0.5; }
-    .bplib-filterHeader button.active { opacity: 1; }
-    .bplib-filterHeader button:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
-    .bplib-filterHeader button:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
 
     /* --- SHOP: UPGRADE CARDS --- */
     .bplib-upgrade {
@@ -1408,10 +1459,11 @@
       }
       const toolbar = makeDiv(this.dialogInner, "bplib-toolbar", ["bplib-toolbar"]);
       toolbar.innerHTML = `
-            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
+            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import" title="Import Blueprint">+</button>
+            <div class="bplib-filterHeader" id="bplib-filter-tags"></div>
             <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
         `;
-      this.filterHeader = makeDiv(this.dialogInner, "bplib-filter-tags", ["bplib-filterHeader"]);
+      this.filterHeader = toolbar.querySelector("#bplib-filter-tags");
       this.gridContainer = makeDiv(this.dialogInner, "bplib-grid", ["bplib-grid"]);
       this.overlay = this.dialogInner;
       this.bindEvents();
