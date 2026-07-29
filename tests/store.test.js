@@ -337,9 +337,9 @@ describe('BlueprintStore Logic', () => {
 
                 await BlueprintStore.init(mod, mockReadFile);
 
-                // "obsolete-val" and "Obsolete Name" were not found in any legacy file, so they are pruned
-                expect(mod.settings.deletedValues).toEqual(["keep-tomb-val"]);
-                expect(mod.settings.deletedNames).toEqual(["Keep Tombstone Name"]);
+                // Tombstones are preserved during legacy scan to prevent deleted blueprints from resurfacing
+                expect(mod.settings.deletedValues).toEqual(["keep-tomb-val", "obsolete-val"]);
+                expect(mod.settings.deletedNames).toEqual(["Keep Tombstone Name", "Obsolete Name"]);
             });
 
             it('skips tombstone pruning if readFileAsync is not a function', async () => {
@@ -452,6 +452,67 @@ describe('BlueprintStore Logic', () => {
             expect(spy).toHaveBeenCalled();
             expect(mod.settings.migrationVersion).toMatch(/^1\.0\.3-dev\.\d+$/);
             spy.mockRestore();
+        });
+    });
+
+    describe('Issue #4: Tombstone preservation during version updates', () => {
+        it('does NOT resurface deleted blueprints when updating to a new version', async () => {
+            // Mock localStorage containing an old blueprint from v1.0.0
+            const legacyBp = { id: 1, name: "Deleted BP", value: "DELETED_VALUE_123", tags: [] };
+            global.localStorage = {
+                getItem: vi.fn((key) => {
+                    if (key === "bplib_blueprints") {
+                        return JSON.stringify([legacyBp]);
+                    }
+                    return null;
+                })
+            };
+
+            // Mod state in v1.0.3: user deleted legacyBp, so blueprints is empty and deletedValues has the tombstone
+            const mod = {
+                meta: { version: '1.1.0' },
+                settings: {
+                    migrationVersion: '1.0.3',
+                    blueprints: [],
+                    deletedValues: ['DELETED_VALUE_123'],
+                    deletedNames: ['Deleted BP']
+                },
+                saveSettings: () => {}
+            };
+
+            // Storage reader returns a v1.0.3 settings file with another blueprint, but NOT legacyBp (because legacyBp was deleted in 1.0.3)
+            const listKeysAsync = vi.fn(async () => ["modsettings_bp-library__1.0.3.json"]);
+            const readFileAsync = vi.fn(async (file) => {
+                if (file.includes('1.0.3')) {
+                    return JSON.stringify({ blueprints: [{ id: 99, name: "Other Active BP", value: "OTHER_ACTIVE_VAL_999", tags: [] }], deletedValues: ['DELETED_VALUE_123'] });
+                }
+                throw new Error("file_not_found");
+            });
+
+            // Run migration for v1.1.0 (with forceIsDev = false)
+            await BlueprintStore.init(mod, readFileAsync, listKeysAsync, false);
+
+            // Simulate second load: mod.settings was saved with deletedValues
+            const secondMod = {
+                meta: { version: '1.1.1' }, // another version bump or reload
+                settings: mod.settings,
+                saveSettings: () => {}
+            };
+            await BlueprintStore.init(secondMod, readFileAsync, listKeysAsync, false);
+
+            // Simulate third load: mod.settings.deletedValues was wiped to [] at the end of secondMod init
+            const thirdMod = {
+                meta: { version: '1.1.2' },
+                settings: secondMod.settings,
+                saveSettings: () => {}
+            };
+            await BlueprintStore.init(thirdMod, readFileAsync, listKeysAsync, false);
+
+            // Verify: deleted blueprint MUST NOT resurface, and tombstone MUST be preserved
+            expect(thirdMod.settings.blueprints).toHaveLength(1);
+            expect(thirdMod.settings.blueprints[0].value).toBe('OTHER_ACTIVE_VAL_999');
+            expect(thirdMod.settings.blueprints.some(bp => bp.value === 'DELETED_VALUE_123')).toBe(false);
+            expect(thirdMod.settings.deletedValues).toContain('DELETED_VALUE_123');
         });
     });
 });

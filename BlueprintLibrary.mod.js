@@ -407,36 +407,43 @@
               const raw = await reader(file);
               if (raw) {
                 const parsed = JSON.parse(raw);
-                if (parsed && Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
-                  for (const bp of parsed.blueprints) {
-                    if (bp) {
-                      if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
-                      if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
-                    }
-                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
-                      migratedAny = true;
-                    }
-                  }
-                  if (Array.isArray(parsed.availableTags)) {
-                    mod.settings.availableTags = mod.settings.availableTags || [];
-                    parsed.availableTags.forEach((t) => {
-                      if (!mod.settings.availableTags.includes(t)) {
-                        mod.settings.availableTags.push(t);
+                if (parsed && typeof parsed === "object") {
+                  if (Array.isArray(parsed.deletedValues)) {
+                    parsed.deletedValues.forEach((v) => {
+                      if (v && typeof v === "string" && !deletedValues.includes(v)) {
+                        deletedValues.push(v);
                       }
                     });
+                  }
+                  if (Array.isArray(parsed.deletedNames)) {
+                    parsed.deletedNames.forEach((n) => {
+                      if (n && typeof n === "string" && !deletedNames.includes(n)) {
+                        deletedNames.push(n);
+                      }
+                    });
+                  }
+                  if (Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
+                    for (const bp of parsed.blueprints) {
+                      if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                        migratedAny = true;
+                      }
+                    }
+                    if (Array.isArray(parsed.availableTags)) {
+                      mod.settings.availableTags = mod.settings.availableTags || [];
+                      parsed.availableTags.forEach((t) => {
+                        if (!mod.settings.availableTags.includes(t)) {
+                          mod.settings.availableTags.push(t);
+                        }
+                      });
+                    }
                   }
                 }
               }
             } catch (e) {
-              const errStr = e ? e.message || String(e) : "";
-              if (errStr !== "file_not_found") {
-                scanExecutedSuccessfully = false;
-              }
             }
           }
         } catch (err) {
           console.warn("[BlueprintBook] Migration read failure:", err);
-          scanExecutedSuccessfully = false;
         }
       }
       try {
@@ -455,10 +462,6 @@
                 const bps = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.blueprints) ? parsed.blueprints : null;
                 if (bps && bps.length > 0) {
                   for (const bp of bps) {
-                    if (bp) {
-                      if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
-                      if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
-                    }
                     if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
                       migratedAny = true;
                     }
@@ -475,10 +478,8 @@
       if (migratedAny) {
         mod.settings.blueprints = currentBlueprints;
       }
-      if (scanExecutedSuccessfully) {
-        mod.settings.deletedValues = deletedValues.filter((v) => scannedLegacyValues.has(v));
-        mod.settings.deletedNames = deletedNames.filter((n) => scannedLegacyNames.has(n));
-      }
+      mod.settings.deletedValues = deletedValues;
+      mod.settings.deletedNames = deletedNames;
     },
     async getDynamicCandidateFiles(mod, listKeysAsync = null) {
       const modId = mod && mod.meta && mod.meta.id ? mod.meta.id : "bp-library";
@@ -535,7 +536,7 @@
           }
         }
       }
-      ["1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach((v) => versionSet.add(v));
+      ["1.0.3", "1.0.2", "1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach((v) => versionSet.add(v));
       for (const id of knownIds) {
         for (const ver of versionSet) {
           const filename = `modsettings_${id}__${ver}.json`;
