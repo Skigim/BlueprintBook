@@ -88,9 +88,11 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
         const toolbar = makeDiv(this.dialogInner, "bplib-toolbar", ["bplib-toolbar"]);
         toolbar.innerHTML = `
-            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import" title="Import Blueprint">+</button>
             <div class="bplib-filterHeader" id="bplib-filter-tags"></div>
-            <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
+            <div class="bplib-toolbar-right">
+                <button class="button styledButton good bplib-btn-import" id="bplib-btn-import" title="Import Blueprint">+</button>
+                <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
+            </div>
         `;
 
         this.filterHeader = toolbar.querySelector('#bplib-filter-tags');
@@ -622,8 +624,12 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                         updateBtn.style.color = '#fff';
                         updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
                         const importBtn = toolbar.querySelector('#bplib-btn-import');
-                        if (importBtn && importBtn.nextSibling) {
-                            toolbar.insertBefore(updateBtn, importBtn.nextSibling);
+                        if (importBtn && importBtn.parentNode) {
+                            if (importBtn.nextSibling) {
+                                importBtn.parentNode.insertBefore(updateBtn, importBtn.nextSibling);
+                            } else {
+                                importBtn.parentNode.appendChild(updateBtn);
+                            }
                         } else {
                             toolbar.appendChild(updateBtn);
                         }

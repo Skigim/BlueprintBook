@@ -58,40 +58,12 @@ export const CSS = `
     /* --- TOOLBAR CONTAINER --- */
     .bplib-toolbar {
         display: flex;
-        gap: 10px;
-        margin-bottom: 10px;
+        gap: 12px;
+        margin-bottom: 12px;
         align-items: center;
     }
 
-    /* --- MATCHING STATISTICS PANEL "+" IMPORT BUTTON --- */
-    .bplib-toolbar .bplib-btn-import {
-        height: 20px;
-        width: 24px;
-        min-width: 24px;
-        padding: 0 !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: #44484a !important;
-        color: #fff !important;
-        opacity: 0.8;
-        font-size: 14px;
-        font-weight: bold;
-        border: 0;
-        border-radius: 4px;
-        cursor: pointer;
-        box-shadow: none;
-        line-height: 1;
-        transition: opacity 0.2s ease-in-out;
-    }
-    html[data-theme="dark"] .bplib-toolbar .bplib-btn-import {
-        background-color: #585e6d !important;
-    }
-    .bplib-toolbar .bplib-btn-import:hover {
-        opacity: 1;
-    }
-
-    /* --- STATISTICS TABS EXACT MATCH --- */
+    /* --- STATISTICS TABS EXACT MATCH (SCALED TO UI SCALE 28px) --- */
     .bplib-filterHeader {
         display: flex;
         padding: 0;
@@ -99,15 +71,15 @@ export const CSS = `
         align-items: center;
     }
     .bplib-filterHeader button {
-        height: 20px;
-        padding: 1px 10px;
+        height: 28px;
+        padding: 2px 14px;
         border: 0;
         box-shadow: none;
-        min-width: 30px;
+        min-width: 36px;
         color: #fff;
         opacity: 0.25;
         border-radius: 0;
-        font-size: 11px;
+        font-size: 13px;
         font-family: "GameFont", sans-serif;
         text-transform: uppercase;
         cursor: pointer;
@@ -120,12 +92,12 @@ export const CSS = `
         background-color: #585e6d !important;
     }
     .bplib-filterHeader button:first-child {
-        border-top-left-radius: 4px;
-        border-bottom-left-radius: 4px;
+        border-top-left-radius: 5px;
+        border-bottom-left-radius: 5px;
     }
     .bplib-filterHeader button:last-child {
-        border-top-right-radius: 4px;
-        border-bottom-right-radius: 4px;
+        border-top-right-radius: 5px;
+        border-bottom-right-radius: 5px;
     }
     .bplib-filterHeader button:hover {
         opacity: 0.6;
@@ -134,18 +106,52 @@ export const CSS = `
         opacity: 1 !important;
     }
 
-    /* --- SEARCH BAR (FAR RIGHT, MATCHING HEIGHT) --- */
-    .bplib-toolbar #bplib-search {
+    /* --- RIGHT-ALIGNED TOOLBAR ACTIONS (BLUE '+' BUTTON & SEARCHBAR) --- */
+    .bplib-toolbar-right {
         margin-left: auto;
-        height: 20px;
-        width: 180px;
-        padding: 1px 8px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    /* --- BLUE '+' IMPORT BUTTON --- */
+    .bplib-toolbar .bplib-btn-import {
+        height: 28px;
+        width: 32px;
+        min-width: 32px;
+        padding: 0 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #4a97df !important;
+        color: #ffffff !important;
+        opacity: 0.9;
+        font-size: 18px;
+        font-weight: bold;
+        border: 0;
+        border-radius: 5px;
+        cursor: pointer;
+        box-shadow: none;
+        line-height: 1;
+        transition: opacity 0.2s ease-in-out, background-color 0.12s ease-in-out;
+    }
+    .bplib-toolbar .bplib-btn-import:hover {
+        opacity: 1;
+        background-color: #3b82c4 !important;
+    }
+
+    /* --- SEARCH BAR (FAR RIGHT, MATCHING 28px HEIGHT) --- */
+    .bplib-toolbar #bplib-search {
+        height: 28px;
+        width: 200px;
+        padding: 2px 10px;
         box-sizing: border-box;
-        font-size: 11px;
-        border-radius: 4px;
+        font-size: 12px;
+        border-radius: 5px;
         border: 0;
         background-color: #44484a;
         color: #fff;
+        margin: 0;
     }
     html[data-theme="dark"] .bplib-toolbar #bplib-search {
         background-color: #585e6d;
