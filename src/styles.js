@@ -295,6 +295,26 @@ export const CSS = `
     }
 
     /* --- PREVIEW DIALOG STYLES --- */
+    .bplib-textarea {
+        background: #eee;
+        color: #333438;
+        border: 1px solid #ccc;
+        font-family: "GameFont", sans-serif;
+    }
+    .bplib-textarea::placeholder {
+        color: #777;
+        opacity: 0.8;
+    }
+    html[data-theme="dark"] .bplib-textarea {
+        background: rgba(0, 0, 0, 0.25);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    html[data-theme="dark"] .bplib-textarea::placeholder {
+        color: #aaa;
+        opacity: 0.7;
+    }
+
     .dialogUpgrades .dialogInner .buttons {
         display: flex;
         align-items: center;

@@ -319,6 +319,26 @@
     }
 
     /* --- PREVIEW DIALOG STYLES --- */
+    .bplib-textarea {
+        background: #eee;
+        color: #333438;
+        border: 1px solid #ccc;
+        font-family: "GameFont", sans-serif;
+    }
+    .bplib-textarea::placeholder {
+        color: #777;
+        opacity: 0.8;
+    }
+    html[data-theme="dark"] .bplib-textarea {
+        background: rgba(0, 0, 0, 0.25);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    html[data-theme="dark"] .bplib-textarea::placeholder {
+        color: #aaa;
+        opacity: 0.7;
+    }
+
     .dialogUpgrades .dialogInner .buttons {
         display: flex;
         align-items: center;
@@ -874,7 +894,7 @@
         return `
                 <div class="formElement">
                     <label>${this.label}</label>
-                    <textarea id="custom-textarea-${this.id}" class="input-text" placeholder="${placeholder}" style="height: 150px; width: 100%; resize: vertical; box-sizing: border-box; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px;">${safeValue}</textarea>
+                    <textarea id="custom-textarea-${this.id}" class="input-text bplib-textarea" placeholder="${placeholder}" style="height: 150px; width: 100%; resize: vertical; box-sizing: border-box; padding: 10px; border-radius: 4px;">${safeValue}</textarea>
                 </div>
             `;
       },
