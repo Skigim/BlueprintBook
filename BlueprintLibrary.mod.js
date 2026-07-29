@@ -82,6 +82,13 @@
     .bplib-toolbar {
         display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
     }
+    .bplib-toolbar #bplib-search {
+        margin: 0;
+        height: 32px;
+        padding: 4px 10px;
+        box-sizing: border-box;
+        flex: 1;
+    }
     .bplib-grid {
         flex: 1;
         min-height: 0;
