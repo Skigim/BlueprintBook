@@ -2,6 +2,23 @@
 
 All notable changes to the **Blueprint Book** mod will be documented in this file.
 
+## [1.0.3] - 2026-07-28
+
+### Added
+
+- **Native BaseHUDPart Architecture**: Converted the Blueprint Book main window into a native shapez `BaseHUDPart`, eliminating lazy dialog instantiation and integrating seamlessly with native game HUD lifecycle hooks.
+- **Statistics-Style Segmented Tab Bar**: Redesigned the tag filter header into a native segmented tab pill container (`ALL | PAINT | STACK | ...`) matching shapez's `HUDStatistics` panel.
+- **Horizontal Tag Scrolling**: Added smooth horizontal scrolling with hidden scrollbar tracks for tag filter tabs when managing large blueprint tag collections.
+- **Compact Import Button & Right-Aligned Toolbar**: Replaced the wide text import button with a compact blue `+` button positioned next to a right-aligned search bar.
+- **Developer Helper Tools**: Exposed `window.BlueprintBookDev` with version testing helpers (`setVersion`, `resetVersion`, `setDevMode`) for dev workflows.
+
+### Bugs Squashed
+
+- **Library Card Progression Lock**: Fixed an issue where several buildings were not properly progression-locked from the library card view, despite being locked in the preview dialog.
+- **Rapid Blueprint Deletion Sync**: Fixed an issue where rapidly deleting multiple blueprints could require multiple click attempts while the database file synchronized.
+- **Save Hotkey (Ctrl+P) Triggers**: Fixed `Ctrl+P` hotkey saving so copying a new blueprint from the world properly triggers a new library save even if it does not yet exist in the library.
+- **Deleted Migrated Blueprint Resurfacing**: Fixed version migration tracking so deleted migrated blueprints no longer resurface when updating to a new version of the mod.
+
 ## [1.0.2] - 2026-07-24
 
 ### Added

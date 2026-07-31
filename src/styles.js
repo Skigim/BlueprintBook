@@ -21,6 +21,19 @@ export const CSS = `
     }
 
     /* --- DIALOG OVERRIDES --- */
+    #ingame_HUD_BlueprintLibrary {
+        z-index: 430;
+    }
+    #ingame_HUD_BlueprintLibrary .dialogInner {
+        width: 840px;
+        max-width: 90vw;
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        border-radius: 8px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+    }
     .dialogMods .dialogInner .content {
         width: 600px !important;
         max-width: 90vw;
@@ -42,8 +55,120 @@ export const CSS = `
         max-height: 800px;
         pointer-events: auto;
     }
+    /* --- TOOLBAR CONTAINER --- */
     .bplib-toolbar {
-        display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
+        display: flex;
+        gap: calc(10px * var(--ui-scale));
+        margin-bottom: calc(12px * var(--ui-scale));
+        align-items: center;
+    }
+
+    /* --- STATISTICS TABS EXACT NATIVE MATCH --- */
+    .bplib-filterHeader {
+        display: flex;
+        padding: 0;
+        margin: 0;
+        align-items: center;
+        overflow-x: auto;
+        max-width: calc(420px * var(--ui-scale));
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    .bplib-filterHeader::-webkit-scrollbar {
+        display: none;
+    }
+    .bplib-filterHeader button {
+        flex-shrink: 0;
+        height: calc(20px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border: 0;
+        box-shadow: none;
+        min-width: calc(30px * var(--ui-scale));
+        color: #fff;
+        opacity: 0.25;
+        border-radius: 0;
+        font-size: calc(11px * var(--ui-scale));
+        font-family: "GameFont", sans-serif;
+        text-transform: uppercase;
+        cursor: pointer;
+        background-color: #44484a !important;
+        transition: opacity 0.2s ease-in-out;
+        margin: 0;
+        box-sizing: content-box;
+    }
+    html[data-theme="dark"] .bplib-filterHeader button {
+        background-color: #585e6d !important;
+    }
+    .bplib-filterHeader button:first-child {
+        border-top-left-radius: calc(6px * var(--ui-scale));
+        border-bottom-left-radius: calc(6px * var(--ui-scale));
+    }
+    .bplib-filterHeader button:last-child {
+        border-top-right-radius: calc(6px * var(--ui-scale));
+        border-bottom-right-radius: calc(6px * var(--ui-scale));
+    }
+    .bplib-filterHeader button:hover {
+        opacity: 0.6;
+    }
+    .bplib-filterHeader button.active {
+        opacity: 1 !important;
+    }
+
+    /* --- RIGHT-ALIGNED TOOLBAR ACTIONS (BLUE '+' BUTTON & SEARCHBAR) --- */
+    .bplib-toolbar-right {
+        margin-left: auto;
+        display: flex;
+        gap: calc(8px * var(--ui-scale));
+        align-items: center;
+    }
+
+    /* --- BLUE '+' IMPORT BUTTON --- */
+    .bplib-toolbar .bplib-btn-import {
+        height: calc(20px * var(--ui-scale));
+        width: calc(26px * var(--ui-scale));
+        min-width: calc(26px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #4a97df !important;
+        color: #ffffff !important;
+        opacity: 0.9;
+        font-size: calc(15px * var(--ui-scale));
+        font-weight: bold;
+        border: 0;
+        border-radius: calc(6px * var(--ui-scale));
+        cursor: pointer;
+        box-shadow: none;
+        line-height: 1;
+        box-sizing: content-box;
+        transition: opacity 0.2s ease-in-out, background-color 0.12s ease-in-out;
+    }
+    .bplib-toolbar .bplib-btn-import:hover {
+        opacity: 1;
+        background-color: #3b82c4 !important;
+    }
+
+    /* --- SEARCH BAR (MATCHING NATIVE HEIGHT) --- */
+    .bplib-toolbar #bplib-search {
+        height: calc(20px * var(--ui-scale));
+        width: calc(180px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(8px * var(--ui-scale));
+        box-sizing: content-box;
+        font-size: calc(11px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        border: 0;
+        background-color: #44484a;
+        color: #fff;
+        margin: 0;
+    }
+    html[data-theme="dark"] .bplib-toolbar #bplib-search {
+        background-color: #585e6d;
+        color: #fff;
+    }
+    .bplib-toolbar #bplib-search::placeholder {
+        color: #fff;
+        opacity: 0.4;
     }
     .bplib-grid {
         flex: 1;
@@ -55,34 +180,6 @@ export const CSS = `
         gap: 10px;
         pointer-events: auto;
     }
-
-    /* --- STATISTICS: TAGS FILTER HEADER --- */
-    .bplib-filterHeader {
-        display: flex;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
-    }
-    .bplib-filterHeader button {
-        height: 20px;
-        padding: 1px 10px;
-        border: 0;
-        box-shadow: none;
-        min-width: 30px;
-        color: #fff;
-        opacity: 0.25;
-        background: rgba(255,255,255,0.1);
-        border-radius: 0;
-        font-size: 11px;
-        font-family: "GameFont", sans-serif;
-        cursor: pointer;
-    }
-    html[data-theme="dark"] .bplib-filterHeader button {
-        background: #474b58;
-    }
-    .bplib-filterHeader button:hover { opacity: 0.5; }
-    .bplib-filterHeader button.active { opacity: 1; }
-    .bplib-filterHeader button:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
-    .bplib-filterHeader button:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
 
     /* --- SHOP: UPGRADE CARDS --- */
     .bplib-upgrade {
@@ -197,7 +294,21 @@ export const CSS = `
         top: calc(210px * var(--ui-scale)) !important;
     }
 
-    /* --- PREVIEW DIALOG STYLES --- */
+    /* --- FORM & TEXTAREA STYLING --- */
+    .bplib-textarea {
+        background: #eee !important;
+        color: #333438 !important;
+        border: 0 !important;
+        border-radius: 6px;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        font-family: "GameFont", sans-serif;
+    }
+    .bplib-textarea::placeholder {
+        color: #777;
+        opacity: 0.8;
+    }
+
     .dialogUpgrades .dialogInner .buttons {
         display: flex;
         align-items: center;

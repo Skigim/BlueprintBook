@@ -1,7 +1,18 @@
+export function getActiveVersion(mod, forceIsDev = null) {
+    const baseVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "1.0.3";
+    const isDev = forceIsDev !== null
+        ? Boolean(forceIsDev)
+        : (typeof IS_DEV !== "undefined" ? Boolean(IS_DEV) : Boolean(mod && mod.meta && mod.meta.isDev));
+    if (isDev) {
+        return `${baseVersion}-dev.${Date.now()}`;
+    }
+    return baseVersion;
+}
+
 export const BlueprintStore = {
     mod: null,
 
-    async init(mod, readFileAsync = null, listKeysAsync = null) {
+    async init(mod, readFileAsync = null, listKeysAsync = null, forceIsDev = null) {
         if (!mod || typeof mod !== "object") return;
         this.mod = mod;
 
@@ -20,7 +31,7 @@ export const BlueprintStore = {
             mod.settings.deletedNames = [];
         }
 
-        const currentVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "";
+        const currentVersion = getActiveVersion(mod, forceIsDev);
         if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
             await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
             mod.settings.migrationVersion = currentVersion;
@@ -116,36 +127,43 @@ export const BlueprintStore = {
                         const raw = await reader(file);
                         if (raw) {
                             const parsed = JSON.parse(raw);
-                            if (parsed && Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
-                                for (const bp of parsed.blueprints) {
-                                    if (bp) {
-                                        if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
-                                        if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
-                                    }
-                                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
-                                        migratedAny = true;
-                                    }
-                                }
-                                if (Array.isArray(parsed.availableTags)) {
-                                    mod.settings.availableTags = mod.settings.availableTags || [];
-                                    parsed.availableTags.forEach(t => {
-                                        if (!mod.settings.availableTags.includes(t)) {
-                                            mod.settings.availableTags.push(t);
+                            if (parsed && typeof parsed === "object") {
+                                if (Array.isArray(parsed.deletedValues)) {
+                                    parsed.deletedValues.forEach(v => {
+                                        if (v && typeof v === "string" && !deletedValues.includes(v)) {
+                                            deletedValues.push(v);
                                         }
                                     });
+                                }
+                                if (Array.isArray(parsed.deletedNames)) {
+                                    parsed.deletedNames.forEach(n => {
+                                        if (n && typeof n === "string" && !deletedNames.includes(n)) {
+                                            deletedNames.push(n);
+                                        }
+                                    });
+                                }
+                                if (Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
+                                    for (const bp of parsed.blueprints) {
+                                        if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                                            migratedAny = true;
+                                        }
+                                    }
+                                    if (Array.isArray(parsed.availableTags)) {
+                                        mod.settings.availableTags = mod.settings.availableTags || [];
+                                        parsed.availableTags.forEach(t => {
+                                            if (!mod.settings.availableTags.includes(t)) {
+                                                mod.settings.availableTags.push(t);
+                                            }
+                                        });
+                                    }
                                 }
                             }
                         }
                     } catch (e) {
-                        const errStr = e ? (e.message || String(e)) : "";
-                        if (errStr !== "file_not_found") {
-                            scanExecutedSuccessfully = false;
-                        }
                     }
                 }
             } catch (err) {
                 console.warn("[BlueprintBook] Migration read failure:", err);
-                scanExecutedSuccessfully = false;
             }
         }
 
@@ -166,10 +184,6 @@ export const BlueprintStore = {
                             const bps = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.blueprints) ? parsed.blueprints : null);
                             if (bps && bps.length > 0) {
                                 for (const bp of bps) {
-                                    if (bp) {
-                                        if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
-                                        if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
-                                    }
                                     if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
                                         migratedAny = true;
                                     }
@@ -187,10 +201,8 @@ export const BlueprintStore = {
             mod.settings.blueprints = currentBlueprints;
         }
 
-        if (scanExecutedSuccessfully) {
-            mod.settings.deletedValues = deletedValues.filter(v => scannedLegacyValues.has(v));
-            mod.settings.deletedNames = deletedNames.filter(n => scannedLegacyNames.has(n));
-        }
+        mod.settings.deletedValues = deletedValues;
+        mod.settings.deletedNames = deletedNames;
     },
 
     async getDynamicCandidateFiles(mod, listKeysAsync = null) {
@@ -256,7 +268,7 @@ export const BlueprintStore = {
         }
 
         // Standard fallback versions
-        ["1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach(v => versionSet.add(v));
+        ["1.0.3", "1.0.2", "1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach(v => versionSet.add(v));
 
         for (const id of knownIds) {
             for (const ver of versionSet) {

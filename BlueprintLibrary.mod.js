@@ -4,12 +4,13 @@
     id: "bp-library",
     name: "Blueprint Library",
     author: "Skigim",
-    version: "1.0.2",
+    version: "1.0.3",
     website: "",
     description: "A full rewrite of KiitikM's Blueprint Library mod. Features include: perfectly integrated native-style UI, custom tagging and filtering system, unified edit dialogs, and memory leak fixes.",
     minimumGameVersion: ">=1.5.0",
     doesNotAffectSavegame: true,
     dependencies: ["bp-string"],
+    isDev: false,
     settings: {
       blueprints: [],
       nextBlueprintId: 1,
@@ -44,6 +45,19 @@
     }
 
     /* --- DIALOG OVERRIDES --- */
+    #ingame_HUD_BlueprintLibrary {
+        z-index: 430;
+    }
+    #ingame_HUD_BlueprintLibrary .dialogInner {
+        width: 840px;
+        max-width: 90vw;
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        border-radius: 8px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+    }
     .dialogMods .dialogInner .content {
         width: 600px !important;
         max-width: 90vw;
@@ -65,8 +79,120 @@
         max-height: 800px;
         pointer-events: auto;
     }
+    /* --- TOOLBAR CONTAINER --- */
     .bplib-toolbar {
-        display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
+        display: flex;
+        gap: calc(10px * var(--ui-scale));
+        margin-bottom: calc(12px * var(--ui-scale));
+        align-items: center;
+    }
+
+    /* --- STATISTICS TABS EXACT NATIVE MATCH --- */
+    .bplib-filterHeader {
+        display: flex;
+        padding: 0;
+        margin: 0;
+        align-items: center;
+        overflow-x: auto;
+        max-width: calc(420px * var(--ui-scale));
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    .bplib-filterHeader::-webkit-scrollbar {
+        display: none;
+    }
+    .bplib-filterHeader button {
+        flex-shrink: 0;
+        height: calc(20px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(10px * var(--ui-scale));
+        border: 0;
+        box-shadow: none;
+        min-width: calc(30px * var(--ui-scale));
+        color: #fff;
+        opacity: 0.25;
+        border-radius: 0;
+        font-size: calc(11px * var(--ui-scale));
+        font-family: "GameFont", sans-serif;
+        text-transform: uppercase;
+        cursor: pointer;
+        background-color: #44484a !important;
+        transition: opacity 0.2s ease-in-out;
+        margin: 0;
+        box-sizing: content-box;
+    }
+    html[data-theme="dark"] .bplib-filterHeader button {
+        background-color: #585e6d !important;
+    }
+    .bplib-filterHeader button:first-child {
+        border-top-left-radius: calc(6px * var(--ui-scale));
+        border-bottom-left-radius: calc(6px * var(--ui-scale));
+    }
+    .bplib-filterHeader button:last-child {
+        border-top-right-radius: calc(6px * var(--ui-scale));
+        border-bottom-right-radius: calc(6px * var(--ui-scale));
+    }
+    .bplib-filterHeader button:hover {
+        opacity: 0.6;
+    }
+    .bplib-filterHeader button.active {
+        opacity: 1 !important;
+    }
+
+    /* --- RIGHT-ALIGNED TOOLBAR ACTIONS (BLUE '+' BUTTON & SEARCHBAR) --- */
+    .bplib-toolbar-right {
+        margin-left: auto;
+        display: flex;
+        gap: calc(8px * var(--ui-scale));
+        align-items: center;
+    }
+
+    /* --- BLUE '+' IMPORT BUTTON --- */
+    .bplib-toolbar .bplib-btn-import {
+        height: calc(20px * var(--ui-scale));
+        width: calc(26px * var(--ui-scale));
+        min-width: calc(26px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #4a97df !important;
+        color: #ffffff !important;
+        opacity: 0.9;
+        font-size: calc(15px * var(--ui-scale));
+        font-weight: bold;
+        border: 0;
+        border-radius: calc(6px * var(--ui-scale));
+        cursor: pointer;
+        box-shadow: none;
+        line-height: 1;
+        box-sizing: content-box;
+        transition: opacity 0.2s ease-in-out, background-color 0.12s ease-in-out;
+    }
+    .bplib-toolbar .bplib-btn-import:hover {
+        opacity: 1;
+        background-color: #3b82c4 !important;
+    }
+
+    /* --- SEARCH BAR (MATCHING NATIVE HEIGHT) --- */
+    .bplib-toolbar #bplib-search {
+        height: calc(20px * var(--ui-scale));
+        width: calc(180px * var(--ui-scale));
+        padding: calc(1px * var(--ui-scale)) calc(8px * var(--ui-scale));
+        box-sizing: content-box;
+        font-size: calc(11px * var(--ui-scale));
+        border-radius: calc(6px * var(--ui-scale));
+        border: 0;
+        background-color: #44484a;
+        color: #fff;
+        margin: 0;
+    }
+    html[data-theme="dark"] .bplib-toolbar #bplib-search {
+        background-color: #585e6d;
+        color: #fff;
+    }
+    .bplib-toolbar #bplib-search::placeholder {
+        color: #fff;
+        opacity: 0.4;
     }
     .bplib-grid {
         flex: 1;
@@ -78,34 +204,6 @@
         gap: 10px;
         pointer-events: auto;
     }
-
-    /* --- STATISTICS: TAGS FILTER HEADER --- */
-    .bplib-filterHeader {
-        display: flex;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
-    }
-    .bplib-filterHeader button {
-        height: 20px;
-        padding: 1px 10px;
-        border: 0;
-        box-shadow: none;
-        min-width: 30px;
-        color: #fff;
-        opacity: 0.25;
-        background: rgba(255,255,255,0.1);
-        border-radius: 0;
-        font-size: 11px;
-        font-family: "GameFont", sans-serif;
-        cursor: pointer;
-    }
-    html[data-theme="dark"] .bplib-filterHeader button {
-        background: #474b58;
-    }
-    .bplib-filterHeader button:hover { opacity: 0.5; }
-    .bplib-filterHeader button.active { opacity: 1; }
-    .bplib-filterHeader button:first-child { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
-    .bplib-filterHeader button:last-child { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
 
     /* --- SHOP: UPGRADE CARDS --- */
     .bplib-upgrade {
@@ -220,7 +318,21 @@
         top: calc(210px * var(--ui-scale)) !important;
     }
 
-    /* --- PREVIEW DIALOG STYLES --- */
+    /* --- FORM & TEXTAREA STYLING --- */
+    .bplib-textarea {
+        background: #eee !important;
+        color: #333438 !important;
+        border: 0 !important;
+        border-radius: 6px;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        font-family: "GameFont", sans-serif;
+    }
+    .bplib-textarea::placeholder {
+        color: #777;
+        opacity: 0.8;
+    }
+
     .dialogUpgrades .dialogInner .buttons {
         display: flex;
         align-items: center;
@@ -300,9 +412,17 @@
 `;
 
   // src/store.js
+  function getActiveVersion(mod, forceIsDev = null) {
+    const baseVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "1.0.3";
+    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(false) : Boolean(mod && mod.meta && mod.meta.isDev);
+    if (isDev) {
+      return `${baseVersion}-dev.${Date.now()}`;
+    }
+    return baseVersion;
+  }
   var BlueprintStore = {
     mod: null,
-    async init(mod, readFileAsync = null, listKeysAsync = null) {
+    async init(mod, readFileAsync = null, listKeysAsync = null, forceIsDev = null) {
       if (!mod || typeof mod !== "object") return;
       this.mod = mod;
       if (!mod.settings || typeof mod.settings !== "object") {
@@ -317,7 +437,7 @@
       if (!Array.isArray(mod.settings.deletedNames)) {
         mod.settings.deletedNames = [];
       }
-      const currentVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "";
+      const currentVersion = getActiveVersion(mod, forceIsDev);
       if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
         await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
         mod.settings.migrationVersion = currentVersion;
@@ -398,36 +518,43 @@
               const raw = await reader(file);
               if (raw) {
                 const parsed = JSON.parse(raw);
-                if (parsed && Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
-                  for (const bp of parsed.blueprints) {
-                    if (bp) {
-                      if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
-                      if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
-                    }
-                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
-                      migratedAny = true;
-                    }
-                  }
-                  if (Array.isArray(parsed.availableTags)) {
-                    mod.settings.availableTags = mod.settings.availableTags || [];
-                    parsed.availableTags.forEach((t) => {
-                      if (!mod.settings.availableTags.includes(t)) {
-                        mod.settings.availableTags.push(t);
+                if (parsed && typeof parsed === "object") {
+                  if (Array.isArray(parsed.deletedValues)) {
+                    parsed.deletedValues.forEach((v) => {
+                      if (v && typeof v === "string" && !deletedValues.includes(v)) {
+                        deletedValues.push(v);
                       }
                     });
+                  }
+                  if (Array.isArray(parsed.deletedNames)) {
+                    parsed.deletedNames.forEach((n) => {
+                      if (n && typeof n === "string" && !deletedNames.includes(n)) {
+                        deletedNames.push(n);
+                      }
+                    });
+                  }
+                  if (Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
+                    for (const bp of parsed.blueprints) {
+                      if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                        migratedAny = true;
+                      }
+                    }
+                    if (Array.isArray(parsed.availableTags)) {
+                      mod.settings.availableTags = mod.settings.availableTags || [];
+                      parsed.availableTags.forEach((t) => {
+                        if (!mod.settings.availableTags.includes(t)) {
+                          mod.settings.availableTags.push(t);
+                        }
+                      });
+                    }
                   }
                 }
               }
             } catch (e) {
-              const errStr = e ? e.message || String(e) : "";
-              if (errStr !== "file_not_found") {
-                scanExecutedSuccessfully = false;
-              }
             }
           }
         } catch (err) {
           console.warn("[BlueprintBook] Migration read failure:", err);
-          scanExecutedSuccessfully = false;
         }
       }
       try {
@@ -446,10 +573,6 @@
                 const bps = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.blueprints) ? parsed.blueprints : null;
                 if (bps && bps.length > 0) {
                   for (const bp of bps) {
-                    if (bp) {
-                      if (bp.value && typeof bp.value === "string") scannedLegacyValues.add(bp.value);
-                      if (bp.name && typeof bp.name === "string") scannedLegacyNames.add(bp.name);
-                    }
                     if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
                       migratedAny = true;
                     }
@@ -466,10 +589,8 @@
       if (migratedAny) {
         mod.settings.blueprints = currentBlueprints;
       }
-      if (scanExecutedSuccessfully) {
-        mod.settings.deletedValues = deletedValues.filter((v) => scannedLegacyValues.has(v));
-        mod.settings.deletedNames = deletedNames.filter((n) => scannedLegacyNames.has(n));
-      }
+      mod.settings.deletedValues = deletedValues;
+      mod.settings.deletedNames = deletedNames;
     },
     async getDynamicCandidateFiles(mod, listKeysAsync = null) {
       const modId = mod && mod.meta && mod.meta.id ? mod.meta.id : "bp-library";
@@ -526,7 +647,7 @@
           }
         }
       }
-      ["1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach((v) => versionSet.add(v));
+      ["1.0.3", "1.0.2", "1.0.1", "1.0.0", "1.0", "2.0", "0.1.0"].forEach((v) => versionSet.add(v));
       for (const id of knownIds) {
         for (const ver of versionSet) {
           const filename = `modsettings_${id}__${ver}.json`;
@@ -709,19 +830,18 @@
         $old.createElements.call(this, parent);
         const mapper = this.root.keyMapper;
         const k = shapez.KEYMAPPINGS;
-        const isUnlocked = () => !this.root.hubGoals || typeof this.root.hubGoals.isRewardUnlocked === "function" && this.root.hubGoals.isRewardUnlocked(shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints");
         const customBindings = [
           {
             // [SELECTION ACTIVE] Save selected area to Blueprint Book
             label: "Save to Book",
             keys: [k?.massSelect?.massSelectStart || 17, "+", 80],
-            condition: () => this.anythingSelectedOnMap && isUnlocked()
+            condition: () => this.anythingSelectedOnMap && isBlueprintsUnlocked(this.root)
           },
           {
             // Open / Toggle Blueprint Book when not placing a blueprint
             label: "Blueprint Book",
             keys: [80],
-            condition: () => !this.blueprintPlacementActive && isUnlocked()
+            condition: () => !this.blueprintPlacementActive && isBlueprintsUnlocked(this.root)
           }
         ];
         for (let i = 0; i < customBindings.length; ++i) {
@@ -768,7 +888,7 @@
         return `
                 <div class="formElement">
                     <label>${this.label}</label>
-                    <textarea id="custom-textarea-${this.id}" class="input-text" placeholder="${placeholder}" style="height: 150px; width: 100%; resize: vertical; box-sizing: border-box; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px;">${safeValue}</textarea>
+                    <textarea id="custom-textarea-${this.id}" class="input-text bplib-textarea" placeholder="${placeholder}" style="height: 150px; width: 100%; resize: vertical; box-sizing: border-box; padding: 10px; border-radius: 4px;">${safeValue}</textarea>
                 </div>
             `;
       },
@@ -1042,7 +1162,7 @@
     render() {
       if (!this.ctx) return;
       const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
-      if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector) return;
+      if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector || !gShapez.Rectangle) return;
       const w = this.canvas.width;
       const h = this.canvas.height;
       const mapBgColor = gShapez.THEMES && gShapez.THEMES.dark && gShapez.THEMES.dark.map && gShapez.THEMES.dark.map.background || "#1c2333";
@@ -1136,6 +1256,8 @@
     });
     if (dialog.buttonSignals && dialog.buttonSignals.equip) {
       dialog.buttonSignals.equip.add(() => {
+        const locked = getLockedEntitiesInBlueprint(root, entities || blueprint);
+        if (locked && locked.length > 0) return;
         if (viewer) {
           try {
             viewer.cleanup();
@@ -1243,6 +1365,20 @@
   // src/changelog.js
   var MOD_CHANGELOG = [
     {
+      version: "1.0.3",
+      date: "2026-07-28",
+      entries: [
+        "<strong>Native BaseHUDPart Architecture</strong>: Converted main window to native BaseHUDPart lifecycle, integrating smoothly with in-game overlays.",
+        "<strong>Statistics-Style Segmented Tab Bar</strong>: Redesigned tag filter header into native segmented pill tabs with dynamic UI scale support.",
+        "<strong>Horizontal Tag Scrolling</strong>: Added smooth horizontal scrolling with hidden scrollbar tracks for large tag collections.",
+        "<strong>Compact Import Button & Right-Aligned Toolbar</strong>: Replaced wide import button with compact blue '+' button next to right-aligned search bar.",
+        "<strong>Library Card Progression Lock Fix</strong>: Fixed several buildings not properly progression-locked from the library card view.",
+        "<strong>Rapid Blueprint Deletion Sync Fix</strong>: Fixed multiple click requirement when rapidly deleting blueprints.",
+        "<strong>Save Hotkey (Ctrl+P) Fix</strong>: Fixed Ctrl+P saving when copying un-saved blueprints from the world.",
+        "<strong>Deleted Blueprint Resurfacing Fix</strong>: Fixed version migration tracking so deleted blueprints do not resurface on update."
+      ]
+    },
+    {
       version: "1.0.2",
       date: "2026-07-24",
       entries: [
@@ -1274,6 +1410,7 @@
     const entry = MOD_CHANGELOG.find((item) => item.version.replace(/^v/i, "").trim() === cleanVer);
     return entry ? entry.entries : [];
   }
+  var RELEASE_NOTES_1_0_3 = getReleaseNotesForVersion("1.0.3");
   var RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
   var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
@@ -1288,10 +1425,14 @@
     if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
       const id = `Blueprint Book v${METADATA.version}`;
       if (!shapez.CHANGELOG.some((item) => item.version === id)) {
+        const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
+        const matchingEntry = Array.isArray(MOD_CHANGELOG) ? MOD_CHANGELOG.find((item) => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer) : null;
+        const entries = getReleaseNotesForVersion(METADATA.version);
+        const date = matchingEntry && matchingEntry.date || "2026-07-24";
         shapez.CHANGELOG.unshift({
           version: id,
-          date: MOD_CHANGELOG[0] && MOD_CHANGELOG[0].date || "2026-07-24",
-          entries: MOD_CHANGELOG[0].entries
+          date,
+          entries
         });
       }
     }
@@ -1317,13 +1458,51 @@
     }
     return locked;
   }
+  function isBlueprintsUnlocked(root) {
+    if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
+      const reward = shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints";
+      return root.hubGoals.isRewardUnlocked(reward);
+    }
+    return true;
+  }
   var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
-    createElements(parent) {
+    createElements(parent = document.body) {
       this.parent = parent;
       this.activeTagFilter = null;
       this.searchQuery = "";
+      const makeDiv = shapez && shapez.makeDiv || ((p, id, classes, text) => {
+        const el = document.createElement("div");
+        if (id) el.id = id;
+        if (classes && Array.isArray(classes)) classes.forEach((c) => el.classList.add(c));
+        if (text) el.textContent = text;
+        if (p) (p.element || p).appendChild(el);
+        return el;
+      });
+      this.background = makeDiv(parent, "ingame_HUD_BlueprintLibrary", ["ingameDialog"]);
+      this.dialogInner = makeDiv(this.background, null, ["dialogInner", "dialogMods", "optionChooserDialog", "dialogUpgrades"]);
+      this.title = makeDiv(this.dialogInner, null, ["title"], "Blueprint Book");
+      this.closeButton = makeDiv(this.title, null, ["closeButton"]);
+      if (typeof this.trackClicks === "function") {
+        this.trackClicks(this.closeButton, this.close);
+      }
+      if (typeof this.closeOnBackgroundClick === "function") {
+        this.closeOnBackgroundClick(this.background, this.close);
+      }
+      const toolbar = makeDiv(this.dialogInner, "bplib-toolbar", ["bplib-toolbar"]);
+      toolbar.innerHTML = `
+            <div class="bplib-filterHeader" id="bplib-filter-tags"></div>
+            <div class="bplib-toolbar-right">
+                <button class="button styledButton good bplib-btn-import" id="bplib-btn-import" title="Import Blueprint">+</button>
+                <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
+            </div>
+        `;
+      this.filterHeader = toolbar.querySelector("#bplib-filter-tags");
+      this.gridContainer = makeDiv(this.dialogInner, "bplib-grid", ["bplib-grid"]);
+      this.overlay = this.dialogInner;
+      this.bindEvents();
     }
     bindEvents() {
+      if (!this.overlay) return;
       const searchInput = this.overlay.querySelector("#bplib-search");
       if (searchInput) {
         searchInput.onpointerdown = () => searchInput.focus();
@@ -1338,9 +1517,16 @@
           e.stopPropagation();
         }, { passive: true });
       }
-      this.dialog.trackClicks(this.overlay.querySelector("#bplib-btn-import"), () => {
-        this.openImportDialog();
-      });
+      const importBtn = this.overlay.querySelector("#bplib-btn-import");
+      if (importBtn) {
+        if (typeof this.trackClicks === "function") {
+          this.trackClicks(importBtn, () => this.openImportDialog());
+        } else if (this.dialog && typeof this.dialog.trackClicks === "function") {
+          this.dialog.trackClicks(importBtn, () => this.openImportDialog());
+        } else {
+          importBtn.addEventListener("click", () => this.openImportDialog());
+        }
+      }
     }
     _showBlueprintFormDialog({ title, desc, defaults = {}, textareaId = "string", onSubmit }) {
       const nameInput = new shapez.FormElementInput({
@@ -1397,10 +1583,6 @@
           if (d && typeof d.cleanup === "function") {
             d.cleanup();
           }
-          if (this.clickDetectors) {
-            const index = this.clickDetectors.indexOf(d);
-            if (index >= 0) this.clickDetectors.splice(index, 1);
-          }
         }
         this.dynamicClickDetectors = [];
       }
@@ -1409,25 +1591,53 @@
       if (!this.dynamicClickDetectors) this.dynamicClickDetectors = [];
       const detector = new shapez.ClickDetector(element, {});
       detector.click.add(handler, this);
-      this.registerClickDetector(detector);
+      if (typeof this.registerClickDetector === "function") {
+        this.registerClickDetector(detector);
+      }
       this.dynamicClickDetectors.push(detector);
     }
     initialize() {
+      if (!this.background) {
+        this.createElements(this.parent || document.body);
+      }
       this.visible = false;
+      this.updateDialog = null;
+      this.latestUpdateInfo = null;
+      if (shapez && shapez.DynamicDomAttach) {
+        this.domAttach = new shapez.DynamicDomAttach(this.root, this.background, {
+          attachClass: "visible"
+        });
+      }
+      if (shapez && shapez.InputReceiver && shapez.KeyActionMapper) {
+        this.inputReceiver = new shapez.InputReceiver("blueprintLibrary");
+        this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver);
+        if (shapez.KEYMAPPINGS) {
+          if (shapez.KEYMAPPINGS.general?.back) {
+            this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.general.back).add(this.close, this);
+          }
+          if (shapez.KEYMAPPINGS.ingame?.menuClose) {
+            this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.ingame.menuClose).add(this.close, this);
+          }
+        }
+      }
       registerNativeChangelogEntry();
+      this.close();
       this.checkUpdateOnce();
     }
     async checkUpdateOnce() {
       if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
       _HUDBlueprintLibrary.hasCheckedUpdate = true;
-      const currentVersion = METADATA.version;
+      const currentVersion = getActiveVersion(this.root?.app?.modLoader?.mods?.find((m) => m?.metadata?.id === "bp-library") || BlueprintStore.mod);
       const lastSeenVersion = BlueprintStore.getLastSeenVersion();
       const skippedVersion = BlueprintStore.getSkippedVersion();
       try {
         const update = await checkForUpdates(currentVersion);
-        if (update.updateAvailable && update.latestVersion !== skippedVersion) {
-          this.showUpdateDialog(update);
-          BlueprintStore.setLastSeenVersion(currentVersion);
+        if (update && update.updateAvailable) {
+          this.latestUpdateInfo = update;
+          if (update.latestVersion !== skippedVersion) {
+            this.showUpdateDialog(update);
+            BlueprintStore.setLastSeenVersion(currentVersion);
+          }
         } else if (lastSeenVersion !== currentVersion) {
           this.showWelcomeDialog(currentVersion);
           BlueprintStore.setLastSeenVersion(currentVersion);
@@ -1462,7 +1672,37 @@
         dialog.dialogElem.classList.add("dialogMods", "updateAvailableDialog");
       }
     }
+    async toggleUpdateDialog() {
+      if (this.updateDialog) {
+        if (this.root?.hud?.parts?.dialogs) {
+          this.root.hud.parts.dialogs.closeDialog(this.updateDialog);
+        }
+        this.updateDialog = null;
+        return;
+      }
+      if (this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable) {
+        this.showUpdateDialog(this.latestUpdateInfo);
+        return;
+      }
+      const update = await checkForUpdates(METADATA.version);
+      if (update && update.updateAvailable) {
+        this.latestUpdateInfo = update;
+        this.showUpdateDialog(update);
+      } else {
+        this.notify(`Blueprint Book v${METADATA.version} is up to date!`, NOTIFY.info);
+      }
+    }
     showUpdateDialog({ latestVersion, downloadUrl, releaseNotes }) {
+      this.latestUpdateInfo = { latestVersion, downloadUrl, releaseNotes, updateAvailable: true };
+      if (this.updateDialog) {
+        try {
+          if (this.root?.hud?.parts?.dialogs) {
+            this.root.hud.parts.dialogs.closeDialog(this.updateDialog);
+          }
+        } catch (e) {
+        }
+        this.updateDialog = null;
+      }
       if (shapez?.T?.dialogs?.buttons) {
         shapez.T.dialogs.buttons.viewOnModIo = "VIEW ON MOD.IO";
         shapez.T.dialogs.buttons.skipVersion = "SKIP VERSION";
@@ -1485,6 +1725,14 @@
         buttons: ["cancel:bad:escape", "skipVersion:neutral", "viewOnModIo:good:enter"],
         closeButton: false
       });
+      this.updateDialog = dialog;
+      if (dialog.closeRequested) {
+        dialog.closeRequested.add(() => {
+          if (this.updateDialog === dialog) {
+            this.updateDialog = null;
+          }
+        });
+      }
       this.root.hud.parts.dialogs.internalShowDialog(dialog);
       if (dialog.dialogElem) {
         dialog.dialogElem.classList.add("dialogMods", "updateAvailableDialog");
@@ -1495,6 +1743,16 @@
             BlueprintStore.setSkippedVersion(latestVersion);
           } catch (e) {
             console.error("[BlueprintBook] Failed to save skipped version:", e);
+          }
+          if (this.updateDialog === dialog) {
+            this.updateDialog = null;
+          }
+        });
+      }
+      if (dialog.buttonSignals.cancel) {
+        dialog.buttonSignals.cancel.add(() => {
+          if (this.updateDialog === dialog) {
+            this.updateDialog = null;
           }
         });
       }
@@ -1508,15 +1766,14 @@
           } else {
             window.open(targetUrl, "_blank");
           }
+          if (this.updateDialog === dialog) {
+            this.updateDialog = null;
+          }
         });
       }
     }
     isBlueprintsUnlocked() {
-      if (this.root && this.root.hubGoals && typeof this.root.hubGoals.isRewardUnlocked === "function") {
-        const reward = shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints";
-        return this.root.hubGoals.isRewardUnlocked(reward);
-      }
-      return true;
+      return isBlueprintsUnlocked(this.root);
     }
     showBlueprintsNotUnlocked() {
       if (this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
@@ -1525,6 +1782,9 @@
         const desc = dialogsT && dialogsT.desc || "Unlocks at level 12!";
         this.root.hud.parts.dialogs.showInfo(title, desc);
       }
+    }
+    isBlockingOverlay() {
+      return Boolean(this.visible);
     }
     handleSaveHotkey() {
       if (!this.root || !this.root.hud || !this.root.hud.parts.massSelector) return "stop_propagation";
@@ -1543,65 +1803,51 @@
     }
     handleToggleHotkey() {
       if (this.visible) {
-        if (this.dialog) this.dialog.closeRequested.dispatch();
+        this.close();
       } else {
         this.show();
       }
       return "stop_propagation";
     }
     cleanup() {
-      super.cleanup();
+      if (super.cleanup) super.cleanup();
+      if (this.root?.app?.inputMgr && this.inputReceiver) {
+        this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
+      }
       this.cleanupDynamicClickDetectors();
       this.visible = false;
-      this.dialog = null;
-      this.overlay = null;
     }
     show() {
       try {
-        if (this.dialog) return;
+        if (!this.background) {
+          this.createElements(this.parent || document.body);
+        }
         if (!this.isBlueprintsUnlocked()) {
           this.showBlueprintsNotUnlocked();
           return;
         }
-        this.dialog = new shapez.Dialog({
-          app: this.root.app,
-          title: "Blueprint Book",
-          contentHTML: `
-                    <div class="bplib-dialog-content">
-                        <div class="bplib-toolbar">
-                            <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
-                            <input type="text" class="input-text" placeholder="Search blueprints..." id="bplib-search">
-                        </div>
-                        <div id="bplib-filter-tags" class="bplib-filterHeader"></div>
-                        
-                        <div id="bplib-grid" class="bplib-grid"></div>
-                    </div>
-                `,
-          buttons: [],
-          closeButton: true
-        });
-        this.root.hud.parts.dialogs.internalShowDialog(this.dialog);
-        this.dialog.dialogElem.classList.add("dialogMods", "optionChooserDialog", "dialogUpgrades");
         this.visible = true;
-        this.overlay = this.dialog.element || document.querySelector(".ingameDialog:last-child");
-        this.bindEvents();
+        if (this.root?.app?.inputMgr && this.inputReceiver) {
+          this.root.app.inputMgr.makeSureAttachedAndOnTop(this.inputReceiver);
+        }
         this.render();
-        this.dialog.closeRequested.add(() => {
-          this.dialog = null;
-          this.overlay = null;
-          this.visible = false;
-          this.cleanupDynamicClickDetectors();
-        });
+        this.update();
       } catch (err) {
         console.error("Error in show():", err);
         this.notify("Error opening Blueprint Book. Check console.", NOTIFY.error);
       }
     }
     close() {
-      if (this.dialog && this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
-        this.root.hud.parts.dialogs.closeDialog(this.dialog);
+      this.visible = false;
+      if (this.root?.app?.inputMgr && this.inputReceiver) {
+        this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
       }
-      this.cleanup();
+      this.update();
+    }
+    update() {
+      if (this.domAttach) {
+        this.domAttach.update(this.visible);
+      }
     }
     notify(message, type) {
       if (this.root && this.root.hud && this.root.hud.signals && this.root.hud.signals.notification) {
@@ -1614,8 +1860,16 @@
         return;
       }
       try {
-        const modLoader = shapez.BlueprintLibraryModLoader;
-        const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");
+        const modLoader = shapez?.BlueprintLibraryModLoader;
+        if (!modLoader || !Array.isArray(modLoader.mods)) {
+          this.notify("Blueprint strings mod loader unavailable.", NOTIFY.error);
+          return;
+        }
+        const bpMod = modLoader.mods.find((m) => m?.metadata?.id === "bp-string");
+        if (!bpMod || !bpMod.constructor || typeof bpMod.constructor.deserialize !== "function") {
+          this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
+          return;
+        }
         const entities = bpMod.constructor.deserialize(this.root, blueprintString);
         if (entities) {
           const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
@@ -1665,7 +1919,43 @@
     render() {
       try {
         this.cleanupDynamicClickDetectors();
-        const tagsContainer = this.overlay.querySelector("#bplib-filter-tags");
+        const searchInput = this.overlay ? this.overlay.querySelector("#bplib-search") : null;
+        if (searchInput && searchInput.value !== (this.searchQuery || "")) {
+          searchInput.value = this.searchQuery || "";
+        }
+        const toolbar = this.overlay ? this.overlay.querySelector("#bplib-toolbar") : null;
+        if (toolbar) {
+          let updateBtn = toolbar.querySelector("#bplib-btn-update");
+          const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
+          if (showUpdateBtn) {
+            if (!updateBtn) {
+              updateBtn = document.createElement("button");
+              updateBtn.className = "button styledButton bplib-btn-update";
+              updateBtn.id = "bplib-btn-update";
+              updateBtn.style.background = "#e65100";
+              updateBtn.style.color = "#fff";
+              updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+              const importBtn = toolbar.querySelector("#bplib-btn-import");
+              if (importBtn && importBtn.parentNode) {
+                if (importBtn.nextSibling) {
+                  importBtn.parentNode.insertBefore(updateBtn, importBtn.nextSibling);
+                } else {
+                  importBtn.parentNode.appendChild(updateBtn);
+                }
+              } else {
+                toolbar.appendChild(updateBtn);
+              }
+            } else {
+              updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+            }
+            this.trackDynamicClick(updateBtn, () => {
+              this.toggleUpdateDialog();
+            });
+          } else if (updateBtn) {
+            updateBtn.remove();
+          }
+        }
+        const tagsContainer = this.overlay ? this.overlay.querySelector("#bplib-filter-tags") : null;
         if (tagsContainer) {
           tagsContainer.innerHTML = "";
           const allBtn = document.createElement("button");
@@ -1715,8 +2005,19 @@
       descDiv.appendChild(delBtn);
       const reqDiv = document.createElement("div");
       reqDiv.className = "requirements";
-      const entities = deserializeBlueprintEntities(this.root, bp.value);
-      const cost = getBlueprintCost(this.root, entities);
+      if (!this._cardCache) {
+        this._cardCache = /* @__PURE__ */ new Map();
+      }
+      const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
+      let cached = this._cardCache.get(cacheKey);
+      if (!cached) {
+        const entities2 = deserializeBlueprintEntities(this.root, bp?.value);
+        const cost2 = getBlueprintCost(this.root, entities2);
+        const lockedEntities2 = getLockedEntitiesInBlueprint2(this.root, entities2);
+        cached = { entities: entities2, cost: cost2, lockedEntities: lockedEntities2 };
+        this._cardCache.set(cacheKey, cached);
+      }
+      const { entities, cost, lockedEntities } = cached;
       if (cost !== null && cost !== void 0) {
         const costElem = renderBlueprintCostElement(this.root, cost, 24);
         reqDiv.appendChild(costElem);
@@ -1733,9 +2034,9 @@
       equipBtn.className = "button styledButton good bplib-btn-equip";
       equipBtn.textContent = "EQUIP";
       trackClick(equipBtn, () => {
+        if (lockedEntities && lockedEntities.length > 0) return;
         this.equipBlueprint(bp.value);
       });
-      const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
       if (lockedEntities && lockedEntities.length > 0) {
         equipBtn.classList.add("disabled");
         equipBtn.disabled = true;
@@ -1758,7 +2059,8 @@
     }
     renderGrid() {
       try {
-        const grid = this.overlay.querySelector("#bplib-grid");
+        const grid = this.overlay ? this.overlay.querySelector("#bplib-grid") : null;
+        if (!grid) return;
         grid.innerHTML = "";
         let blueprints = BlueprintStore.getAll();
         if (this.searchQuery) {

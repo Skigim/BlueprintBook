@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock the global shapez object before importing ui.js
 global.shapez = {
+    Mod: class {},
     BaseHUDPart: class {
         constructor(root) {
             this.root = root;
@@ -16,6 +17,13 @@ global.shapez = {
             Object.assign(this, opts);
         }
     },
+    ClickDetector: class {
+        constructor(element, opts) {
+            this.element = element;
+            this.click = { add: (handler, receiver) => { element.addEventListener('click', (e) => handler.call(receiver, e)); } };
+        }
+        cleanup() {}
+    },
     BlueprintLibraryModLoader: {
         mods: []
     }
@@ -26,6 +34,7 @@ vi.mock('../src/updater.js', () => ({
 }));
 
 const { HUDBlueprintLibrary, isBlueprintsUnlocked, registerNativeChangelogEntry } = await import('../src/ui.js');
+const { METADATA } = await import('../src/metadata.js');
 
 vi.mock('../lib/ui.js', () => ({
     createTextAreaFormElement: vi.fn(() => ({
@@ -245,8 +254,8 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         await hudLibrary1.checkUpdateOnce();
 
-        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith('1.0.2');
-        expect(BlueprintStore.getLastSeenVersion()).toBe('1.0.2');
+        expect(hudLibrary1.showWelcomeDialog).toHaveBeenCalledWith(METADATA.version);
+        expect(BlueprintStore.getLastSeenVersion()).toBe(METADATA.version);
 
         // Simulate subsequent save load or new game session
         HUDBlueprintLibrary.hasCheckedUpdate = false;
@@ -255,8 +264,89 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         await hudLibrary2.checkUpdateOnce();
 
-        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion ('1.0.2')
+        // Welcome dialog should NOT be shown again because lastSeenVersion === currentVersion
         expect(hudLibrary2.showWelcomeDialog).not.toHaveBeenCalled();
+    });
+
+    it('toggles update dialog open and closed on demand with toggleUpdateDialog()', async () => {
+        const mockDialog = {
+            dialogElem: document.createElement('div'),
+            buttonSignals: {},
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    }
+                }
+            }
+        };
+
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.latestUpdateInfo = { latestVersion: '2.0.0', downloadUrl: 'https://example.com', releaseNotes: 'Major update', updateAvailable: true };
+
+        // 1. First call opens the dialog
+        global.shapez.Dialog = vi.fn().mockImplementation(function() { return mockDialog; });
+        await hudLibrary.toggleUpdateDialog();
+
+        expect(mockRoot.hud.parts.dialogs.internalShowDialog).toHaveBeenCalledWith(mockDialog);
+        expect(hudLibrary.updateDialog).toBe(mockDialog);
+
+        // 2. Second call closes the dialog
+        await hudLibrary.toggleUpdateDialog();
+        expect(mockRoot.hud.parts.dialogs.closeDialog).toHaveBeenCalledWith(mockDialog);
+        expect(hudLibrary.updateDialog).toBeNull();
+    });
+
+    it('renders update button in toolbar when update is available and toggles dialog on click', async () => {
+        const mockOverlay = document.createElement('div');
+        mockOverlay.innerHTML = `
+            <div class="bplib-dialog-content">
+                <div class="bplib-toolbar">
+                    <button class="button styledButton good bplib-btn-import" id="bplib-btn-import">+ Import Blueprint</button>
+                    <button class="button styledButton bplib-btn-update" id="bplib-btn-update">Update (v2.0.0)</button>
+                    <input type="text" class="input-text" id="bplib-search">
+                </div>
+                <div id="bplib-filter-tags"></div>
+                <div id="bplib-grid" class="bplib-grid"></div>
+            </div>
+        `;
+        const mockDialog = {
+            dialogElem: document.createElement('div'),
+            element: mockOverlay,
+            buttonSignals: {},
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+        const mockRoot = {
+            app: {},
+            hud: {
+                parts: {
+                    dialogs: {
+                        internalShowDialog: vi.fn(),
+                        closeDialog: vi.fn()
+                    }
+                }
+            }
+        };
+
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.latestUpdateInfo = { latestVersion: '2.0.0', downloadUrl: 'https://example.com', releaseNotes: 'Major update', updateAvailable: true };
+        hudLibrary.toggleUpdateDialog = vi.fn();
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function() { return mockDialog; });
+        hudLibrary.show();
+
+        const updateBtn = hudLibrary.overlay.querySelector('#bplib-btn-update');
+        expect(updateBtn).not.toBeNull();
+        expect(updateBtn.textContent).toContain('Update (v2.0.0)');
+
+        updateBtn.click();
+        expect(hudLibrary.toggleUpdateDialog).toHaveBeenCalled();
     });
 });
 
@@ -280,26 +370,6 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
     });
 
     it('attaches a wheel event listener to #bplib-grid that calls stopPropagation', async () => {
-        const mockDialogElem = document.createElement('div');
-        const mockOverlay = document.createElement('div');
-        mockOverlay.innerHTML = `
-            <div class="bplib-dialog-content">
-                <div id="bplib-search"></div>
-                <div id="bplib-btn-import"></div>
-                <div id="bplib-filter-tags"></div>
-                <div id="bplib-grid" class="bplib-grid"></div>
-            </div>
-        `;
-
-        const mockDialog = {
-            dialogElem: mockDialogElem,
-            element: mockOverlay,
-            trackClicks: vi.fn(),
-            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
-        };
-
-        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
-
         const mockRoot = {
             app: {},
             hud: {
@@ -313,11 +383,12 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
 
         const { HUDBlueprintLibrary } = await import('../src/ui.js');
         const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.createElements(document.createElement('div'));
         hudLibrary.render = vi.fn();
 
         hudLibrary.show();
 
-        const gridElem = mockOverlay.querySelector('#bplib-grid');
+        const gridElem = hudLibrary.overlay.querySelector('#bplib-grid');
         expect(gridElem).not.toBeNull();
 
         // Dispatch a wheel event and verify stopPropagation is called
@@ -329,18 +400,7 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
         expect(stopPropagationSpy).toHaveBeenCalled();
     });
 
-    it('adds dialogUpgrades class to dialog.dialogElem when show() is called', async () => {
-        const mockDialogElem = document.createElement('div');
-        const mockOverlay = document.createElement('div');
-        const mockDialog = {
-            dialogElem: mockDialogElem,
-            element: mockOverlay,
-            trackClicks: vi.fn(),
-            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
-        };
-
-        global.shapez.Dialog = vi.fn().mockImplementation(function () { return mockDialog; });
-
+    it('adds dialogUpgrades class to dialogInner when createElements() is called', async () => {
         const mockRoot = {
             app: {},
             hud: {
@@ -352,11 +412,9 @@ describe('Blueprint Book Dialog Scroll & Layout Properties', () => {
 
         const { HUDBlueprintLibrary } = await import('../src/ui.js');
         const hudLibrary = new HUDBlueprintLibrary(mockRoot);
-        hudLibrary.render = vi.fn();
+        hudLibrary.createElements(document.createElement('div'));
 
-        hudLibrary.show();
-
-        expect(mockDialogElem.classList.contains('dialogUpgrades')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('dialogUpgrades')).toBe(true);
     });
 });
 
@@ -394,22 +452,11 @@ describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
 
         const { HUDBlueprintLibrary } = await import('../src/ui.js');
         hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.createElements(document.createElement('div'));
         hudLibrary.registerClickDetector = vi.fn();
     });
 
-    it('resets visible to false and cleans up dialog when equipBlueprint is called', async () => {
-        let mockDialogInstance;
-        global.shapez.Dialog = class {
-            constructor(opts) {
-                const elem = document.createElement('div');
-                elem.innerHTML = opts.contentHTML || opts.content || '';
-                this.dialogElem = elem;
-                this.element = elem;
-                this.trackClicks = vi.fn();
-                this.closeRequested = { add: vi.fn(), dispatch: vi.fn() };
-                mockDialogInstance = this;
-            }
-        };
+    it('resets visible to false when equipBlueprint is called', async () => {
         global.shapez.ClickDetector = class { constructor() { this.click = { add: vi.fn() }; } };
         global.shapez.Blueprint = class { constructor(e) {} };
         global.shapez.BlueprintLibraryModLoader = {
@@ -424,9 +471,7 @@ describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
 
         await hudLibrary.equipBlueprint('VALID_BP_STRING');
 
-        expect(mockRoot.hud.parts.dialogs.closeDialog).toHaveBeenCalledWith(mockDialogInstance);
         expect(hudLibrary.visible).toBe(false);
-        expect(hudLibrary.dialog).toBeNull();
     });
 
     it('removes summary badge and BP tier badge entirely from card, and styles PREVIEW button natively', () => {
@@ -805,8 +850,8 @@ describe('registerNativeChangelogEntry', () => {
         registerNativeChangelogEntry();
 
         expect(global.shapez.CHANGELOG.length).toBe(1);
-        expect(global.shapez.CHANGELOG[0].version).toBe('Blueprint Book v1.0.2');
-        expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-24');
+        expect(global.shapez.CHANGELOG[0].version).toBe(`Blueprint Book v${METADATA.version}`);
+        expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-28');
         expect(Array.isArray(global.shapez.CHANGELOG[0].entries)).toBe(true);
         expect(global.shapez.CHANGELOG[0].entries.length).toBeGreaterThan(0);
 
@@ -815,6 +860,306 @@ describe('registerNativeChangelogEntry', () => {
         expect(global.shapez.CHANGELOG.length).toBe(1);
     });
 });
+
+describe('Dev Version Change - Dynamic Boot Check', () => {
+    let mockRoot;
+    let hudLibrary;
+    let mockDialogElem;
+    let mockOverlay;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockDialogElem = document.createElement('div');
+        mockOverlay = document.createElement('div');
+
+        const mockDialog = {
+            dialogElem: mockDialogElem,
+            element: mockOverlay,
+            buttonSignals: {},
+            trackClicks: vi.fn(),
+            closeRequested: { add: vi.fn(), dispatch: vi.fn() }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function (opts = {}) {
+            mockOverlay.innerHTML = opts.contentHTML || opts.content || '';
+            return mockDialog;
+        });
+        global.shapez.ClickDetector = class {
+            constructor(element, opts) {
+                this.element = element;
+                this.click = { add: (handler, receiver) => { element.addEventListener('click', (e) => handler.call(receiver, e)); } };
+            }
+            cleanup() {}
+        };
+
+        mockRoot = {
+            app: {
+                modLoader: {
+                    mods: [{ metadata: { id: 'bp-library', isDev: true }, meta: { version: METADATA.version, isDev: true }, settings: { availableTags: [], blueprints: [] } }]
+                }
+            },
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() }
+                },
+                signals: {
+                    notification: { dispatch: vi.fn() }
+                }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: { availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
+        BlueprintStore.mod = mockRoot.app.modLoader.mods[0];
+
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+    });
+
+    afterEach(() => {
+        if (hudLibrary) hudLibrary.cleanup();
+    });
+
+    it('checkUpdateOnce uses getActiveVersion so isDev = true triggers welcome dialog on boot', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: { availableTags: [], blueprints: [] }, saveSettings: vi.fn() });
+        BlueprintStore.mod = mockRoot.app.modLoader.mods[0];
+        BlueprintStore.setLastSeenVersion(METADATA.version);
+
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+        hudLibrary.showWelcomeDialog = vi.fn();
+
+        await hudLibrary.checkUpdateOnce();
+
+        expect(hudLibrary.showWelcomeDialog).toHaveBeenCalled();
+        const calledVersion = hudLibrary.showWelcomeDialog.mock.calls[0][0];
+        expect(calledVersion).toContain(`${METADATA.version}-dev.`);
+        expect(BlueprintStore.getLastSeenVersion()).toBe(calledVersion);
+    });
+});
+
+describe('BaseHUDPart Lifecycle & isBlockingOverlay Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+    let mockInputMgr;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockInputMgr = {
+            makeSureAttachedAndOnTop: vi.fn(),
+            makeSureDetached: vi.fn()
+        };
+
+        mockRoot = {
+            app: {
+                inputMgr: mockInputMgr
+            },
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+
+        global.shapez.DynamicDomAttach = class {
+            constructor(root, element, opts) {
+                this.root = root;
+                this.element = element;
+                this.opts = opts;
+            }
+            update(visible) {
+                if (visible) {
+                    this.element.classList.add(this.opts.attachClass || 'visible');
+                } else {
+                    this.element.classList.remove(this.opts.attachClass || 'visible');
+                }
+            }
+        };
+        global.shapez.InputReceiver = class {
+            constructor(id) {
+                this.id = id;
+            }
+        };
+        global.shapez.KeyActionMapper = class {
+            constructor(root, receiver) {
+                this.root = root;
+                this.receiver = receiver;
+            }
+            getBinding() {
+                return { add: vi.fn() };
+            }
+        };
+        global.shapez.KEYMAPPINGS = {
+            general: { back: 'back' },
+            ingame: { menuClose: 'menuClose' }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+    });
+
+    it('createElements builds #ingame_HUD_BlueprintLibrary container with .ingameDialog and .dialogInner', () => {
+        const parentElem = document.createElement('div');
+        hudLibrary.createElements(parentElem);
+
+        expect(hudLibrary.background).not.toBeNull();
+        expect(hudLibrary.background.id).toBe('ingame_HUD_BlueprintLibrary');
+        expect(hudLibrary.background.classList.contains('ingameDialog')).toBe(true);
+
+        expect(hudLibrary.dialogInner).not.toBeNull();
+        expect(hudLibrary.dialogInner.classList.contains('dialogInner')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('dialogMods')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('optionChooserDialog')).toBe(true);
+        expect(hudLibrary.dialogInner.classList.contains('dialogUpgrades')).toBe(true);
+        expect(hudLibrary.overlay).toBe(hudLibrary.dialogInner);
+    });
+
+    it('isBlockingOverlay() returns false when hidden and true when shown', () => {
+        const parentElem = document.createElement('div');
+        hudLibrary.createElements(parentElem);
+        hudLibrary.initialize();
+
+        expect(hudLibrary.isBlockingOverlay()).toBe(false);
+
+        hudLibrary.show();
+        expect(hudLibrary.isBlockingOverlay()).toBe(true);
+
+        hudLibrary.close();
+        expect(hudLibrary.isBlockingOverlay()).toBe(false);
+    });
+
+    it('show() and close() toggle this.visible and attach/detach inputReceiver', () => {
+        const parentElem = document.createElement('div');
+        hudLibrary.createElements(parentElem);
+        hudLibrary.initialize();
+
+        expect(hudLibrary.visible).toBe(false);
+
+        hudLibrary.show();
+        expect(hudLibrary.visible).toBe(true);
+        expect(mockInputMgr.makeSureAttachedAndOnTop).toHaveBeenCalledWith(hudLibrary.inputReceiver);
+
+        hudLibrary.close();
+        expect(hudLibrary.visible).toBe(false);
+        expect(mockInputMgr.makeSureDetached).toHaveBeenCalledWith(hudLibrary.inputReceiver);
+    });
+});
+
+describe('Task 3: Persistent DOM Interactions & handleToggleHotkey Specs', () => {
+    let mockRoot;
+    let hudLibrary;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockRoot = {
+            app: {
+                inputMgr: {
+                    makeSureAttachedAndOnTop: vi.fn(),
+                    makeSureDetached: vi.fn()
+                }
+            },
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
+            },
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        const { BlueprintStore } = await import('../src/store.js');
+        BlueprintStore.init({ settings: { availableTags: ['factory', 'belt'], blueprints: [] }, saveSettings: vi.fn() });
+
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.createElements(document.createElement('div'));
+        hudLibrary.initialize();
+    });
+
+    it('persists searchQuery and activeTagFilter across show() -> search -> close() -> show() open/close cycles', () => {
+        hudLibrary.show();
+
+        const searchInput = hudLibrary.overlay.querySelector('#bplib-search');
+        searchInput.value = 'balancer';
+        searchInput.dispatchEvent(new Event('input'));
+
+        hudLibrary.activeTagFilter = 'factory';
+        hudLibrary.render();
+
+        expect(hudLibrary.searchQuery).toBe('balancer');
+        expect(hudLibrary.activeTagFilter).toBe('factory');
+
+        // Close the Blueprint Book
+        hudLibrary.close();
+        expect(hudLibrary.visible).toBe(false);
+
+        // Reopen the Blueprint Book
+        hudLibrary.show();
+        expect(hudLibrary.visible).toBe(true);
+
+        // Verify searchQuery and activeTagFilter state persists
+        expect(hudLibrary.searchQuery).toBe('balancer');
+        expect(hudLibrary.activeTagFilter).toBe('factory');
+        expect(hudLibrary.overlay.querySelector('#bplib-search').value).toBe('balancer');
+    });
+
+    it('synchronizes search input DOM value with searchQuery during render()', () => {
+        hudLibrary.show();
+        hudLibrary.searchQuery = 'machinery';
+        hudLibrary.render();
+
+        const searchInput = hudLibrary.overlay.querySelector('#bplib-search');
+        expect(searchInput.value).toBe('machinery');
+    });
+
+
+    it('handleToggleHotkey() toggles between show() and close()', () => {
+        const showSpy = vi.spyOn(hudLibrary, 'show');
+        const closeSpy = vi.spyOn(hudLibrary, 'close');
+
+        expect(hudLibrary.visible).toBe(false);
+
+        // First press when closed -> calls show()
+        const res1 = hudLibrary.handleToggleHotkey();
+        expect(res1).toBe('stop_propagation');
+        expect(showSpy).toHaveBeenCalledTimes(1);
+        expect(closeSpy).not.toHaveBeenCalled();
+        expect(hudLibrary.visible).toBe(true);
+
+        // Second press when open -> calls close()
+        const res2 = hudLibrary.handleToggleHotkey();
+        expect(res2).toBe('stop_propagation');
+        expect(closeSpy).toHaveBeenCalledTimes(1);
+        expect(hudLibrary.visible).toBe(false);
+    });
+
+    it('render() invokes cleanupDynamicClickDetectors() before re-populating grid cards', () => {
+        const cleanupSpy = vi.spyOn(hudLibrary, 'cleanupDynamicClickDetectors');
+
+        hudLibrary.show();
+        expect(cleanupSpy).toHaveBeenCalled();
+
+        cleanupSpy.mockClear();
+        hudLibrary.render();
+        expect(cleanupSpy).toHaveBeenCalled();
+    });
+});
+
+
+
+
 
 
 

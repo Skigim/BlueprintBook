@@ -130,3 +130,5 @@ class BlueprintLibraryMod extends shapez.Mod {
 }
 
 window.$shapez_registerMod(BlueprintLibraryMod, METADATA);
+
+
