@@ -2,6 +2,20 @@
 
 This document provides deep technical details, architectural decisions, and API contract changes in **Blueprint Book** for developers, modders, and contributors.
 
+## [Unreleased]
+
+### 1. Held-Blueprint Save Hotkey Fix (`src/ui.js`)
+- **Root Cause**: `handleSaveHotkey()` read exclusively from `massSelector.selectedUids`. Native `mass_selector.js` clears `selectedUids` the instant it dispatches `buildingsSelectedForCopy` (i.e. the moment a blueprint is copied/held), so the natural select → Ctrl+C → Ctrl+P flow always hit an empty selection and silently no-opped.
+- **Fix**: `handleSaveHotkey()` now falls back to `root.hud.parts.blueprintPlacer.currentBlueprint.get().entities` when `selectedUids` is empty, preserving the existing mass-selection path when one is active.
+
+### 2. Card Cache Staleness Fix (`src/ui.js`)
+- **Root Cause**: `_createBlueprintCard()`'s per-card cache stored `{ entities, cost, lockedEntities }` together, keyed by `id:value`. `lockedEntities` depends on `root.hubGoals.isBuildingUnlocked()`, which changes as the player progresses through the tech tree mid-session — but once cached it was never recomputed, so a card's locked/EQUIP-disabled state froze at whatever it was on first render.
+- **Fix**: The cache now stores only `{ entities, cost }` (the expensive, content-derived, session-stable values). `lockedEntities` is recomputed from the cached `entities` on every render.
+
+### 3. Dead `keymapper.emit` Removal (`src/ui.js`)
+- **Root Cause**: `equipBlueprint()` had a branch attempting `root.keymapper.emit(...)` / `root.keyMapper.emit(...)` before the real `root.hud.signals.pasteBlueprintRequested.dispatch()` call. Neither `root.keymapper` nor a `.emit()` method exist on shapez's actual `KeyActionMapper` (`shapez_source/src/js/game/key_action_mapper.js`), so the branch was always a no-op. The corresponding unit test asserted against a mock fabricated in the test itself rather than real engine shape, masking the dead code.
+- **Fix**: Removed the dead branch; updated the test to assert on `hud.signals.pasteBlueprintRequested.dispatch()`, the actual call path.
+
 ## [1.0.3] - 2026-07-28
 
 ### 1. Native `BaseHUDPart` Architectural Migration (`src/ui.js`)
