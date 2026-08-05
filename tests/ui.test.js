@@ -166,6 +166,36 @@ describe('HUDBlueprintLibrary Hotkeys', () => {
         global.shapez.BlueprintLibraryModLoader = { mods: [mockBpMod] };
     });
 
+    it('falls back to the currently held blueprint when there is no active mass-selection', () => {
+        // Regression: mass_selector.js clears selectedUids the instant a blueprint is
+        // copied/held, so relying on selectedUids alone silently no-ops Ctrl+P while holding.
+        mockRoot.hud.parts.massSelector.selectedUids = new Set();
+        mockRoot.hud.parts.blueprintPlacer = {
+            currentBlueprint: {
+                get: vi.fn().mockReturnValue({ entities: [{ id: 'heldEntity' }] })
+            }
+        };
+
+        const result = hudLibrary.handleSaveHotkey();
+
+        expect(result).toBe('stop_propagation');
+        expect(mockBpMod.constructor.serialize).toHaveBeenCalledWith([{ id: 'heldEntity' }]);
+        expect(hudLibrary.openImportDialog).toHaveBeenCalledWith('MOCK_SERIALIZED_STRING');
+    });
+
+    it('ignores native save hotkey if there is no active selection and no held blueprint', () => {
+        mockRoot.hud.parts.massSelector.selectedUids = new Set();
+        mockRoot.hud.parts.blueprintPlacer = {
+            currentBlueprint: { get: vi.fn().mockReturnValue(null) }
+        };
+
+        const result = hudLibrary.handleSaveHotkey();
+
+        expect(result).toBe('stop_propagation');
+        expect(mockBpMod.constructor.serialize).not.toHaveBeenCalled();
+        expect(hudLibrary.openImportDialog).not.toHaveBeenCalled();
+    });
+
     it('handles native toggle hotkey and returns stop_propagation', () => {
         hudLibrary.show = vi.fn(() => { hudLibrary.visible = true; });
         const result = hudLibrary.handleToggleHotkey();
@@ -702,9 +732,6 @@ describe('async equipBlueprint', () => {
                     notification: { dispatch: vi.fn() },
                     pasteBlueprintRequested: { dispatch: vi.fn() }
                 }
-            },
-            keymapper: {
-                emit: vi.fn()
             }
         };
 
@@ -807,7 +834,6 @@ describe('async equipBlueprint', () => {
         expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed).toBeNull();
         expect(mockRoot.hud.parts.blueprintPlacer.currentBlueprint.set).not.toHaveBeenCalled();
         expect(writeTextMock).not.toHaveBeenCalled();
-        expect(mockRoot.keymapper.emit).not.toHaveBeenCalled();
         expect(mockRoot.hud.signals.pasteBlueprintRequested.dispatch).not.toHaveBeenCalled();
     });
 
@@ -827,6 +853,30 @@ describe('async equipBlueprint', () => {
         const bpUpdated = { id: 'bp_cache_1', name: 'Cache BP', value: 'NEW_CACHE_BP_VALUE', tags: [] };
         hudLibrary._createBlueprintCard(bpUpdated, () => {});
         expect(deserializeSpy.mock.calls.length).toBeGreaterThan(callCountAfterFirstRender);
+    });
+
+    it('_createBlueprintCard reflects newly-unlocked buildings on re-render even though entities/cost are cached', () => {
+        // Regression: caching {entities, cost, lockedEntities} together kept a card's locked
+        // state frozen from its first render, even after the player leveled up mid-session.
+        const bp = { id: 'bp_progression', name: 'Progression BP', value: 'PROGRESSION_BP_VALUE', tags: [] };
+        const gatedEntity = {
+            components: {
+                StaticMapEntity: {
+                    getMetaBuilding: () => ({ id: 'gated_building' })
+                }
+            }
+        };
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([gatedEntity]);
+        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+
+        let card = hudLibrary._createBlueprintCard(bp, () => {});
+        expect(card.querySelector('.bplib-btn-equip').disabled).toBe(true);
+
+        // Player levels up and unlocks the building; the blueprint's id/value haven't changed.
+        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(true);
+
+        card = hudLibrary._createBlueprintCard(bp, () => {});
+        expect(card.querySelector('.bplib-btn-equip').disabled).toBe(false);
     });
 
     it('_createBlueprintCard disables equip button and sets title tooltip when blueprint contains locked entities', () => {
@@ -875,7 +925,7 @@ describe('async equipBlueprint', () => {
     it('emits paste event and calls close()', async () => {
         await hudLibrary.equipBlueprint('TEST_BP_STRING');
 
-        expect(mockRoot.keymapper.emit).toHaveBeenCalledWith('pasteBlueprintRequested');
+        expect(mockRoot.hud.signals.pasteBlueprintRequested.dispatch).toHaveBeenCalled();
         expect(hudLibrary.close).toHaveBeenCalled();
     });
 });
