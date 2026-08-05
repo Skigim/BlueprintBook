@@ -3,6 +3,7 @@ import { CSS } from "./styles.js";
 import { BlueprintStore } from "./store.js";
 import { HUDBlueprintLibrary } from "./ui.js";
 import { extendHUDGameMenu, extendHUDKeybindingOverlay } from "../lib/ui.js";
+import { selectStorageImpls } from "./storageSelection.js";
 
 async function initStorageBackend(StorageImpl, app, label) {
     if (!StorageImpl) return null;
@@ -34,9 +35,7 @@ class BlueprintLibraryMod extends shapez.Mod {
 
         if (!migrationAlreadyChecked) {
             try {
-                const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
-                const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
-                const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
+                const { PreferredImpl, OtherImpl } = selectStorageImpls(shapez);
 
                 mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
 

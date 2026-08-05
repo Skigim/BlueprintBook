@@ -232,6 +232,11 @@ interface Shapez {
     Blueprint: typeof ShapezBlueprint;
     StorageImplElectron: typeof ShapezStorageImplElectron;
     StorageImplBrowserIndexedDB: typeof ShapezStorageImplBrowserIndexedDB;
+    // Snapshot of the engine's own build-time G_* constants, re-exported from
+    // core/globals.js via modloader.js's exposeExports(). This is how mod code must read
+    // IS_STANDALONE - the bare G_IS_STANDALONE identifier only exists inside the vanilla
+    // game's own webpack bundle, never inside a mod's own esbuild bundle.
+    BUILD_OPTIONS: { IS_STANDALONE: boolean };
     T: ShapezTranslations;
     CHANGELOG: ShapezChangelogEntry[];
 
