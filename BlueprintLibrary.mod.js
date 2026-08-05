@@ -1836,12 +1836,18 @@
         return "stop_propagation";
       }
       const selectedUids = this.root.hud.parts.massSelector.selectedUids;
-      if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
+      let selectedEntities;
+      if (selectedUids && selectedUids.size > 0) {
+        selectedEntities = Array.from(selectedUids).map((uid) => this.root.entityMgr.findByUid(uid)).filter(Boolean);
+      } else {
+        const heldBlueprint = this.root.hud.parts.blueprintPlacer?.currentBlueprint?.get?.();
+        selectedEntities = heldBlueprint?.entities;
+      }
+      if (!selectedEntities || selectedEntities.length === 0) return "stop_propagation";
       const modLoader = shapez.BlueprintLibraryModLoader;
       if (!modLoader || !Array.isArray(modLoader.mods)) return "stop_propagation";
       const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");
       if (!bpMod) return "stop_propagation";
-      const selectedEntities = Array.from(selectedUids).map((uid) => this.root.entityMgr.findByUid(uid)).filter(Boolean);
       const blueprintString = bpMod.constructor.serialize(selectedEntities);
       this.openImportDialog(blueprintString);
       return "stop_propagation";
@@ -1940,11 +1946,6 @@
             }
           } catch (e) {
             console.warn("[BlueprintBook] Clipboard write failed:", e);
-          }
-          if (this.root.keymapper?.emit) {
-            this.root.keymapper.emit("pasteBlueprintRequested");
-          } else if (this.root.keyMapper?.emit) {
-            this.root.keyMapper.emit("pasteBlueprintRequested");
           }
           if (this.root.hud?.signals?.pasteBlueprintRequested) {
             this.root.hud.signals.pasteBlueprintRequested.dispatch();
@@ -2064,11 +2065,11 @@
       if (!cached) {
         const entities2 = deserializeBlueprintEntities(this.root, bp?.value);
         const cost2 = getBlueprintCost(this.root, entities2);
-        const lockedEntities2 = getLockedEntitiesInBlueprint2(this.root, entities2);
-        cached = { entities: entities2, cost: cost2, lockedEntities: lockedEntities2 };
+        cached = { entities: entities2, cost: cost2 };
         this._cardCache.set(cacheKey, cached);
       }
-      const { entities, cost, lockedEntities } = cached;
+      const { entities, cost } = cached;
+      const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
       if (cost !== null && cost !== void 0) {
         const costElem = renderBlueprintCostElement(this.root, cost, 24);
         reqDiv.appendChild(costElem);
@@ -2166,6 +2167,15 @@
     }
   };
 
+  // src/storageSelection.js
+  function selectStorageImpls(shapezGlobal) {
+    const isStandalone = Boolean(shapezGlobal.BUILD_OPTIONS.IS_STANDALONE);
+    return {
+      PreferredImpl: isStandalone ? shapezGlobal.StorageImplElectron : shapezGlobal.StorageImplBrowserIndexedDB,
+      OtherImpl: isStandalone ? shapezGlobal.StorageImplBrowserIndexedDB : shapezGlobal.StorageImplElectron
+    };
+  }
+
   // src/index.js
   async function initStorageBackend(StorageImpl, app2, label) {
     if (!StorageImpl) return null;
@@ -2188,9 +2198,7 @@
       const migrationAlreadyChecked = Boolean(this.settings && this.settings.migrationChecked);
       if (!migrationAlreadyChecked) {
         try {
-          const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
-          const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
-          const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
+          const { PreferredImpl, OtherImpl } = selectStorageImpls(shapez);
           mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
           if (!mainStorage) {
             mainStorage = await initStorageBackend(OtherImpl, this.app, "Fallback");

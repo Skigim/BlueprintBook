@@ -5,7 +5,6 @@
 
 // Injected by esbuild's --define at build time (see package.json build/build:dev scripts).
 declare const IS_DEV: boolean | undefined;
-declare const G_IS_STANDALONE: boolean | undefined;
 
 // A bare `app` global some older shapez builds exposed; store.js probes for it
 // defensively (via `typeof app !== "undefined"`) since docs/shapez_engine_notes.md
