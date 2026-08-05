@@ -449,18 +449,26 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
 
         const selectedUids = this.root.hud.parts.massSelector.selectedUids;
-        
-        if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
+
+        let selectedEntities;
+        if (selectedUids && selectedUids.size > 0) {
+            selectedEntities = Array.from(selectedUids)
+                .map(uid => this.root.entityMgr.findByUid(uid))
+                .filter(Boolean);
+        } else {
+            // Copying a selection clears massSelector.selectedUids the instant the blueprint
+            // is created (native mass_selector.js), so fall back to the currently held blueprint.
+            const heldBlueprint = this.root.hud.parts.blueprintPlacer?.currentBlueprint?.get?.();
+            selectedEntities = heldBlueprint?.entities;
+        }
+
+        if (!selectedEntities || selectedEntities.length === 0) return "stop_propagation";
 
         const modLoader = shapez.BlueprintLibraryModLoader;
         if (!modLoader || !Array.isArray(modLoader.mods)) return "stop_propagation";
 
         const bpMod = modLoader.mods.find(m => m.metadata.id === "bp-string");
         if (!bpMod) return "stop_propagation";
-
-        const selectedEntities = Array.from(selectedUids)
-            .map(uid => this.root.entityMgr.findByUid(uid))
-            .filter(Boolean);
 
         const blueprintString = bpMod.constructor.serialize(selectedEntities);
         this.openImportDialog(blueprintString);
@@ -580,11 +588,6 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                     console.warn("[BlueprintBook] Clipboard write failed:", e);
                 }
 
-                if (this.root.keymapper?.emit) {
-                    this.root.keymapper.emit("pasteBlueprintRequested");
-                } else if (this.root.keyMapper?.emit) {
-                    this.root.keyMapper.emit("pasteBlueprintRequested");
-                }
                 if (this.root.hud?.signals?.pasteBlueprintRequested) {
                     this.root.hud.signals.pasteBlueprintRequested.dispatch();
                 }
@@ -707,12 +710,14 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         if (!cached) {
             const entities = deserializeBlueprintEntities(this.root, bp?.value);
             const cost = getBlueprintCost(this.root, entities);
-            const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
-            cached = { entities, cost, lockedEntities };
+            cached = { entities, cost };
             this._cardCache.set(cacheKey, cached);
         }
 
-        const { entities, cost, lockedEntities } = cached;
+        const { entities, cost } = cached;
+        // Not cached: unlock state can change mid-session (e.g. leveling up), so this
+        // must be recomputed on every render even though entities/cost are stable.
+        const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
 
         if (cost !== null && cost !== undefined) {
             const costElem = renderBlueprintCostElement(this.root, cost, 24);

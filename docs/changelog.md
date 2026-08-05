@@ -2,6 +2,13 @@
 
 All notable changes to the **Blueprint Book** mod will be documented in this file.
 
+## [Unreleased]
+
+### Bugs Squashed
+
+- **Ctrl+P While Holding a Blueprint**: Fixed an issue where pressing `Ctrl+P` to save did nothing if you had just copied a blueprint and were holding it (ready to place). Saving now works whether you have buildings selected or a blueprint held.
+- **Stale Locked Status on Cards**: Fixed an issue where a blueprint card could keep showing as "locked" (EQUIP disabled) after you leveled up and unlocked the building it needed, until you restarted or re-imported it.
+
 ## [1.0.3] - 2026-07-28
 
 ### Added
