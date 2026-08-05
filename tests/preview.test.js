@@ -25,6 +25,7 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
         });
 
         global.shapez = global.shapez || {};
+        global.shapez.T = { dialogs: {} };
         global.shapez.Vector = class {
             constructor(x, y) { this.x = x; this.y = y; }
             sub(v) { return new global.shapez.Vector(this.x - v.x, this.y - v.y); }
@@ -406,10 +407,15 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             expect(observeMock).toHaveBeenCalledWith(container);
             expect(viewer.resizeObserver).toBeDefined();
 
-            // Verify observer callback triggers resize
+            // Verify observer callback triggers resize (real ResizeObserver always invokes
+            // its callback with a ResizeObserverEntry[], even when empty)
             const resizeSpy = vi.spyOn(viewer, 'resize');
-            if (observerCallback) observerCallback();
-            expect(resizeSpy).toHaveBeenCalled();
+            if (observerCallback) observerCallback([]);
+            expect(resizeSpy).toHaveBeenCalledTimes(1);
+
+            // Also exercise the non-empty entries branch (entry.contentRect dimension check)
+            if (observerCallback) observerCallback([{ contentRect: { width: 640, height: 480 } }]);
+            expect(resizeSpy).toHaveBeenCalledTimes(2);
 
             viewer.cleanup();
             expect(disconnectMock).toHaveBeenCalled();

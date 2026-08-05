@@ -4,28 +4,24 @@ import { METADATA } from "./metadata.js";
 import { checkForUpdates } from "./updater.js";
 import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities } from "./preview.js";
 
-const NOTIFY = (shapez && shapez.enumNotificationType) || {
-    info: "info", warning: "warning", error: "error", success: "success",
-};
+const NOTIFY = shapez.enumNotificationType;
 
 import { MOD_CHANGELOG, RELEASE_NOTES_1_0_1, getReleaseNotesForVersion } from "./changelog.js";
 
 export function registerNativeChangelogEntry() {
-    if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
-        const id = `Blueprint Book v${METADATA.version}`;
-        if (!shapez.CHANGELOG.some(item => item.version === id)) {
-            const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
-            const matchingEntry = Array.isArray(MOD_CHANGELOG)
-                ? MOD_CHANGELOG.find(item => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer)
-                : null;
-            const entries = getReleaseNotesForVersion(METADATA.version);
-            const date = (matchingEntry && matchingEntry.date) || "2026-07-24";
-            shapez.CHANGELOG.unshift({
-                version: id,
-                date,
-                entries
-            });
-        }
+    const id = `Blueprint Book v${METADATA.version}`;
+    if (!shapez.CHANGELOG.some(item => item.version === id)) {
+        const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
+        const matchingEntry = Array.isArray(MOD_CHANGELOG)
+            ? MOD_CHANGELOG.find(item => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer)
+            : null;
+        const entries = getReleaseNotesForVersion(METADATA.version);
+        const date = (matchingEntry && matchingEntry.date) || "2026-07-24";
+        shapez.CHANGELOG.unshift({
+            version: id,
+            date,
+            entries
+        });
     }
 }
 
@@ -53,26 +49,25 @@ export function getLockedEntitiesInBlueprint(root, entities) {
 
 export function isBlueprintsUnlocked(root) {
     if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
-        const reward = (shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints) || "reward_blueprints";
+        const reward = shapez.enumHubGoalRewards.reward_blueprints;
         return root.hubGoals.isRewardUnlocked(reward);
     }
     return true;
 }
 
 export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
+    static hasCheckedUpdate = false;
+
+    /** @type {HTMLDivElement|undefined} */
+    background;
+    visible = false;
+
     createElements(parent = document.body) {
         this.parent = parent;
         this.activeTagFilter = null;
         this.searchQuery = "";
 
-        const makeDiv = (shapez && shapez.makeDiv) || ((p, id, classes, text) => {
-            const el = document.createElement("div");
-            if (id) el.id = id;
-            if (classes && Array.isArray(classes)) classes.forEach(c => el.classList.add(c));
-            if (text) el.textContent = text;
-            if (p) (p.element || p).appendChild(el);
-            return el;
-        });
+        const makeDiv = shapez.makeDiv;
 
         this.background = makeDiv(parent, "ingame_HUD_BlueprintLibrary", ["ingameDialog"]);
         this.dialogInner = makeDiv(this.background, null, ["dialogInner", "dialogMods", "optionChooserDialog", "dialogUpgrades"]);
@@ -104,11 +99,11 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     bindEvents() {
         if (!this.overlay) return;
-        const searchInput = this.overlay.querySelector('#bplib-search');
+        const searchInput = /** @type {HTMLInputElement|null} */ (this.overlay.querySelector('#bplib-search'));
         if (searchInput) {
             searchInput.onpointerdown = () => searchInput.focus();
             searchInput.addEventListener('input', (e) => {
-                this.searchQuery = e.target.value.toLowerCase();
+                this.searchQuery = /** @type {HTMLInputElement} */ (e.target).value.toLowerCase();
                 this.render();
             });
         }
@@ -132,6 +127,9 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
     }
 
+    /**
+     * @param {{ title: string, desc: string, defaults?: { name?: string, tags?: string, value?: string }, textareaId?: string, onSubmit: Function }} opts
+     */
     _showBlueprintFormDialog({ title, desc, defaults = {}, textareaId = "string", onSubmit }) {
         const nameInput = new shapez.FormElementInput({
             id: "name",
@@ -158,7 +156,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
         this.root.hud.parts.dialogs.internalShowDialog(dialog);
 
-        if (dialog.buttonSignals && dialog.buttonSignals.ok) {
+        if (dialog.buttonSignals.ok) {
             dialog.buttonSignals.ok.add(() => {
                 const name = nameInput.getValue() || "New Blueprint";
                 const str = stringInput.getValue();
@@ -221,22 +219,18 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         this.updateDialog = null;
         this.latestUpdateInfo = null;
 
-        if (shapez && shapez.DynamicDomAttach) {
-            this.domAttach = new shapez.DynamicDomAttach(this.root, this.background, {
-                attachClass: "visible",
-            });
-        }
+        this.domAttach = new shapez.DynamicDomAttach(this.root, /** @type {HTMLDivElement} */ (this.background), {
+            attachClass: "visible",
+        });
 
-        if (shapez && shapez.InputReceiver && shapez.KeyActionMapper) {
-            this.inputReceiver = new shapez.InputReceiver("blueprintLibrary");
-            this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver);
-            if (shapez.KEYMAPPINGS) {
-                if (shapez.KEYMAPPINGS.general?.back) {
-                    this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.general.back).add(this.close, this);
-                }
-                if (shapez.KEYMAPPINGS.ingame?.menuClose) {
-                    this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.ingame.menuClose).add(this.close, this);
-                }
+        this.inputReceiver = new shapez.InputReceiver("blueprintLibrary");
+        this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver);
+        if (shapez.KEYMAPPINGS) {
+            if (shapez.KEYMAPPINGS.general?.back) {
+                this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.general.back).add(this.close, this);
+            }
+            if (shapez.KEYMAPPINGS.ingame?.menuClose) {
+                this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.ingame.menuClose).add(this.close, this);
             }
         }
 
@@ -256,7 +250,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         try {
             const update = await checkForUpdates(currentVersion);
 
-            if (update && update.updateAvailable) {
+            if (update.updateAvailable) {
                 this.latestUpdateInfo = update;
                 if (update.latestVersion !== skippedVersion) {
                     this.showUpdateDialog(update);
@@ -272,10 +266,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     showWelcomeDialog(version) {
-        const rawNotes = getReleaseNotesForVersion(version);
-        const entries = Array.isArray(rawNotes)
-            ? rawNotes
-            : (rawNotes || "").split("\n").map(l => l.trim()).filter(Boolean);
+        const entries = getReleaseNotesForVersion(version);
 
         const notesHtml = entries
             .map(entry => `<div style="margin-bottom: 6px; line-height: 1.35; padding-left: 14px; position: relative;"><span style="position: absolute; left: 0; color: #4CAF50;">•</span>${entry}</div>`)
@@ -320,7 +311,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
 
         const update = await checkForUpdates(METADATA.version);
-        if (update && update.updateAvailable) {
+        if (update.updateAvailable) {
             this.latestUpdateInfo = update;
             this.showUpdateDialog(update);
         } else {
@@ -328,6 +319,9 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
     }
 
+    /**
+     * @param {{ latestVersion?: string, downloadUrl?: string, releaseNotes?: string }} update
+     */
     showUpdateDialog({ latestVersion, downloadUrl, releaseNotes }) {
         this.latestUpdateInfo = { latestVersion, downloadUrl, releaseNotes, updateAvailable: true };
 
@@ -340,7 +334,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.updateDialog = null;
         }
 
-        if (shapez?.T?.dialogs?.buttons) {
+        if (shapez.T.dialogs.buttons) {
             shapez.T.dialogs.buttons.viewOnModIo = "VIEW ON MOD.IO";
             shapez.T.dialogs.buttons.skipVersion = "SKIP VERSION";
         }
@@ -435,7 +429,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
     showBlueprintsNotUnlocked() {
         if (this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
-            const dialogsT = shapez && shapez.T && shapez.T.dialogs && shapez.T.dialogs.blueprintsNotUnlocked;
+            const dialogsT = shapez.T.dialogs.blueprintsNotUnlocked;
             const title = (dialogsT && dialogsT.title) || "Blueprints Locked";
             const desc = (dialogsT && dialogsT.desc) || "Unlocks at level 12!";
             this.root.hud.parts.dialogs.showInfo(title, desc);
@@ -458,7 +452,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         
         if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
 
-        const bpMod = shapez.BlueprintLibraryModLoader.mods.find(m => m.metadata.id === "bp-string");
+        const modLoader = shapez.BlueprintLibraryModLoader;
+        if (!modLoader || !Array.isArray(modLoader.mods)) return "stop_propagation";
+
+        const bpMod = modLoader.mods.find(m => m.metadata.id === "bp-string");
         if (!bpMod) return "stop_propagation";
 
         const selectedEntities = Array.from(selectedUids)
@@ -480,7 +477,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     cleanup() {
-        if (super.cleanup) super.cleanup();
+        super.cleanup();
         if (this.root?.app?.inputMgr && this.inputReceiver) {
             this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
         }
@@ -539,13 +536,13 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         }
 
         try {
-            const modLoader = shapez?.BlueprintLibraryModLoader;
+            const modLoader = shapez.BlueprintLibraryModLoader;
             if (!modLoader || !Array.isArray(modLoader.mods)) {
                 this.notify("Blueprint strings mod loader unavailable.", NOTIFY.error);
                 return;
             }
-            const bpMod = modLoader.mods.find(m => m?.metadata?.id === "bp-string");
-            if (!bpMod || !bpMod.constructor || typeof bpMod.constructor.deserialize !== "function") {
+            const bpMod = modLoader.mods.find(m => m.metadata.id === "bp-string");
+            if (!bpMod || typeof bpMod.constructor.deserialize !== "function") {
                 this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
                 return;
             }
@@ -553,13 +550,12 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             
             if (entities) {
                 const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
-                if (lockedEntities && lockedEntities.length > 0) {
+                if (lockedEntities.length > 0) {
                     const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
-                    const warningType = (shapez && shapez.enumNotificationType && shapez.enumNotificationType.warning) || NOTIFY.warning;
                     if (this.root.hud?.parts?.notifications?.sendNotification) {
-                        this.root.hud.parts.notifications.sendNotification(warningMsg, warningType);
+                        this.root.hud.parts.notifications.sendNotification(warningMsg, NOTIFY.warning);
                     } else {
-                        this.notify(warningMsg, warningType);
+                        this.notify(warningMsg, NOTIFY.warning);
                     }
                     return;
                 }
@@ -574,7 +570,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                 }
 
                 try {
-                    if (navigator?.clipboard?.writeText) {
+                    // lib.dom.d.ts types navigator.clipboard as always-present, but it's
+                    // genuinely absent in older browsers/non-secure contexts - real feature detection.
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+                    if (navigator.clipboard?.writeText) {
                         await navigator.clipboard.writeText(blueprintString);
                     }
                 } catch (e) {
@@ -606,15 +605,16 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         try {
             this.cleanupDynamicClickDetectors();
 
-            const searchInput = this.overlay ? this.overlay.querySelector('#bplib-search') : null;
+            const searchInput = /** @type {HTMLInputElement|null} */ (this.overlay ? this.overlay.querySelector('#bplib-search') : null);
             if (searchInput && searchInput.value !== (this.searchQuery || "")) {
                 searchInput.value = this.searchQuery || "";
             }
 
             const toolbar = this.overlay ? this.overlay.querySelector('#bplib-toolbar') : null;
             if (toolbar) {
-                let updateBtn = toolbar.querySelector('#bplib-btn-update');
-                const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
+                let updateBtn = /** @type {HTMLButtonElement|null} */ (toolbar.querySelector('#bplib-btn-update'));
+                const updateInfo = this.latestUpdateInfo;
+                const showUpdateBtn = updateInfo && updateInfo.updateAvailable;
                 if (showUpdateBtn) {
                     if (!updateBtn) {
                         updateBtn = document.createElement('button');
@@ -622,7 +622,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                         updateBtn.id = 'bplib-btn-update';
                         updateBtn.style.background = '#e65100';
                         updateBtn.style.color = '#fff';
-                        updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+                        updateBtn.textContent = `Update (v${updateInfo.latestVersion})`;
                         const importBtn = toolbar.querySelector('#bplib-btn-import');
                         if (importBtn && importBtn.parentNode) {
                             if (importBtn.nextSibling) {
@@ -634,7 +634,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                             toolbar.appendChild(updateBtn);
                         }
                     } else {
-                        updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+                        updateBtn.textContent = `Update (v${updateInfo.latestVersion})`;
                     }
                     this.trackDynamicClick(updateBtn, () => {
                         this.toggleUpdateDialog();

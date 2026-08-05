@@ -18,6 +18,7 @@
 - Never assume a host object or property exists (e.g. `app.storage`) — trace the host engine source to confirm actual scoping (closure-scoped vs. property-exposed) before writing logic or test mocks.
 - Before designing state migrations or storage routines, inspect the actual local save data (`AppData/Roaming/...` or IndexedDB) — don't assume a pristine `length === 0` starting state.
 - Passing unit tests is not the same as verified behavior — mocks only test your own assumptions. Don't tell the user something is fixed until real host-runtime behavior is confirmed, not just mocked tests.
+- Before adding a defensive guard (`x && x.y`), check whether `x` is already used as a base class or otherwise proven present elsewhere in the same file — don't guard against conditions that are load-time guaranteed.
 
 # After Every Change
 - Review your own diff before presenting it — run the self-review pass described in the `subagent-driven-development` skill.

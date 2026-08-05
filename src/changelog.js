@@ -41,6 +41,10 @@ export const MOD_CHANGELOG = [
     }
 ];
 
+/**
+ * @param {string} version
+ * @returns {string[]}
+ */
 export function getReleaseNotesForVersion(version) {
     const cleanVer = (version || "").toString().replace(/^v/i, "").trim();
     const entry = MOD_CHANGELOG.find(item => item.version.replace(/^v/i, "").trim() === cleanVer);
