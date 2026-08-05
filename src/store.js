@@ -59,6 +59,27 @@ export const BlueprintStore = {
             mod.settings.migrationVersion = currentVersion;
         }
 
+        this.normalizeSettings(mod);
+        this.persist();
+    },
+
+    /**
+     * Defaults/normalizes everything in `mod.settings` that isn't the migration scan itself:
+     * `nextBlueprintId`, `availableTags` (pruned to tags actually in use), each blueprint entry
+     * (assigning `id`/`createdAt`/fallback `name` where missing), and `lastSeenVersion` /
+     * `skippedVersion`. Idempotent - safe to call again after entries have already been
+     * normalized. Shared by `init()`'s inline path and `runDeferredMigrationScan()`
+     * (`src/migrationScan.js`), which must re-run this after merging legacy blueprints so
+     * merged entries get real ids/timestamps and `nextBlueprintId` advances past them.
+     * @param {any} mod
+     */
+    normalizeSettings(mod) {
+        if (!mod || typeof mod !== "object" || !mod.settings || typeof mod.settings !== "object") return;
+
+        if (!Array.isArray(mod.settings.blueprints)) {
+            mod.settings.blueprints = [];
+        }
+
         if (typeof mod.settings.nextBlueprintId !== "number" || mod.settings.nextBlueprintId < 1) {
             mod.settings.nextBlueprintId = 1;
         }
@@ -97,7 +118,6 @@ export const BlueprintStore = {
         if (mod.settings.nextBlueprintId <= maxId) {
             mod.settings.nextBlueprintId = maxId + 1;
         }
-        this.persist();
     },
 
     _mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues = [], deletedNames = []) {

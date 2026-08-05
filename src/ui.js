@@ -2,6 +2,7 @@ import { createTextAreaFormElement } from "../lib/ui.js";
 import { BlueprintStore, getActiveVersion } from "./store.js";
 import { METADATA } from "./metadata.js";
 import { checkForUpdates } from "./updater.js";
+import { runDeferredMigrationScan } from "./migrationScan.js";
 import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities } from "./preview.js";
 
 const NOTIFY = shapez.enumNotificationType;
@@ -57,6 +58,7 @@ export function isBlueprintsUnlocked(root) {
 
 export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     static hasCheckedUpdate = false;
+    static hasCheckedMigration = false;
 
     /** @type {HTMLDivElement|undefined} */
     background;
@@ -237,6 +239,29 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         registerNativeChangelogEntry();
         this.close();
         this.checkUpdateOnce();
+        this.checkMigrationOnce();
+    }
+
+    /**
+     * Triggers the one-time legacy-data migration scan (real storage backend I/O), deferred
+     * here from the boot-blocking BlueprintLibraryMod.init() (src/index.js). shapez's HUD
+     * system calls initialize() exactly once per HUD part instance - unlike show(), which
+     * fires on every panel open - so this naturally runs only once per game session. The
+     * static hasCheckedMigration flag is an extra guard against initialize() somehow firing
+     * more than once on the same class (mirrors hasCheckedUpdate above); the durable
+     * one-time gate that survives across sessions is mod.settings.migrationChecked, enforced
+     * inside runDeferredMigrationScan() itself.
+     */
+    checkMigrationOnce() {
+        if (HUDBlueprintLibrary.hasCheckedMigration) return;
+        HUDBlueprintLibrary.hasCheckedMigration = true;
+
+        const mod = BlueprintStore.mod;
+        if (!mod) return;
+
+        runDeferredMigrationScan(mod).catch(err => {
+            console.error("[BlueprintBook] Deferred migration scan failed:", err);
+        });
     }
 
     async checkUpdateOnce() {
@@ -738,11 +763,11 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         equipBtn.className = 'button styledButton good bplib-btn-equip';
         equipBtn.textContent = 'EQUIP';
         trackClick(equipBtn, () => {
-            if (lockedEntities && lockedEntities.length > 0) return;
+            if (lockedEntities.length > 0) return;
             this.equipBlueprint(bp.value);
         });
 
-        if (lockedEntities && lockedEntities.length > 0) {
+        if (lockedEntities.length > 0) {
             equipBtn.classList.add("disabled");
             equipBtn.disabled = true;
             equipBtn.title = "Contains locked buildings (unlocked at higher level)";
