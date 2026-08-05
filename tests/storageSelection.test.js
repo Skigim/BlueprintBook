@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { selectStorageImpls } from '../src/storageSelection.js';
 
 describe('selectStorageImpls', () => {
@@ -13,10 +13,6 @@ describe('selectStorageImpls', () => {
         };
     }
 
-    afterEach(() => {
-        delete globalThis.G_IS_STANDALONE;
-    });
-
     it('prefers Electron storage when shapez.BUILD_OPTIONS.IS_STANDALONE is true', () => {
         const { PreferredImpl, OtherImpl } = selectStorageImpls(makeShapez(true));
         expect(PreferredImpl).toBe(FakeElectronStorage);
@@ -29,13 +25,16 @@ describe('selectStorageImpls', () => {
         expect(OtherImpl).toBe(FakeElectronStorage);
     });
 
-    it('ignores a bare G_IS_STANDALONE global and only trusts shapez.BUILD_OPTIONS', () => {
-        // Regression guard for the actual bug: the vanilla game's own webpack bundle defines
-        // a bare G_IS_STANDALONE identifier, but the mod's esbuild bundle never does. If some
-        // environment happens to leak that identifier as a global, selection must still go by
-        // shapez.BUILD_OPTIONS.IS_STANDALONE, not the stray global.
-        globalThis.G_IS_STANDALONE = true;
-        const { PreferredImpl } = selectStorageImpls(makeShapez(false));
-        expect(PreferredImpl).toBe(FakeIndexedDBStorage);
+    it('throws if shapez.BUILD_OPTIONS is missing, instead of silently treating the platform as browser', () => {
+        // shapez.BUILD_OPTIONS is populated unconditionally whenever mod code runs at all
+        // (modloader.js's exposeExports() flattens it from core/globals.js before any mod's
+        // init() executes). Its absence means something is genuinely wrong, so this must
+        // surface as a thrown error - the call site in index.js already wraps this in a
+        // try/catch - rather than silently defaulting isStandalone to false.
+        const shapezWithoutBuildOptions = {
+            StorageImplElectron: FakeElectronStorage,
+            StorageImplBrowserIndexedDB: FakeIndexedDBStorage,
+        };
+        expect(() => selectStorageImpls(shapezWithoutBuildOptions)).toThrow();
     });
 });

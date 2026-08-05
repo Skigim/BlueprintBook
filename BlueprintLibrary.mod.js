@@ -2169,9 +2169,7 @@
 
   // src/storageSelection.js
   function selectStorageImpls(shapezGlobal) {
-    const isStandalone = Boolean(
-      shapezGlobal && shapezGlobal.BUILD_OPTIONS && shapezGlobal.BUILD_OPTIONS.IS_STANDALONE
-    );
+    const isStandalone = Boolean(shapezGlobal.BUILD_OPTIONS.IS_STANDALONE);
     return {
       PreferredImpl: isStandalone ? shapezGlobal.StorageImplElectron : shapezGlobal.StorageImplBrowserIndexedDB,
       OtherImpl: isStandalone ? shapezGlobal.StorageImplBrowserIndexedDB : shapezGlobal.StorageImplElectron
