@@ -75,8 +75,13 @@ vi.mock('../src/updater.js', () => ({
     checkForUpdates: vi.fn().mockResolvedValue({ updateAvailable: false })
 }));
 
+vi.mock('../src/migrationScan.js', () => ({
+    runDeferredMigrationScan: vi.fn().mockResolvedValue(undefined)
+}));
+
 const { HUDBlueprintLibrary, isBlueprintsUnlocked, registerNativeChangelogEntry } = await import('../src/ui.js');
 const { METADATA } = await import('../src/metadata.js');
+const { runDeferredMigrationScan } = await import('../src/migrationScan.js');
 
 vi.mock('../lib/ui.js', () => ({
     createTextAreaFormElement: vi.fn(() => ({
@@ -432,6 +437,68 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         updateBtn.click();
         expect(hudLibrary.toggleUpdateDialog).toHaveBeenCalled();
+    });
+});
+
+describe('Deferred legacy migration scan trigger', () => {
+    let mockRoot;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        // Isolate from checkUpdateOnce()'s own fire-and-forget async work, which also runs
+        // from initialize() and would otherwise race with/pollute these assertions.
+        HUDBlueprintLibrary.hasCheckedUpdate = true;
+        HUDBlueprintLibrary.hasCheckedMigration = false;
+
+        mockRoot = {
+            app: {},
+            hud: {
+                parts: { dialogs: { internalShowDialog: vi.fn() } },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+    });
+
+    it('calls runDeferredMigrationScan with BlueprintStore.mod the first time initialize() runs', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        const mod = { settings: {}, saveSettings: vi.fn() };
+        await BlueprintStore.init(mod);
+
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.initialize();
+
+        expect(runDeferredMigrationScan).toHaveBeenCalledTimes(1);
+        expect(runDeferredMigrationScan).toHaveBeenCalledWith(mod);
+    });
+
+    it('does not call runDeferredMigrationScan again for a second HUD part instance created in the same session', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        const mod = { settings: {}, saveSettings: vi.fn() };
+        await BlueprintStore.init(mod);
+
+        const hudLibrary1 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary1.initialize();
+
+        const hudLibrary2 = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary2.initialize();
+
+        expect(runDeferredMigrationScan).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not throw and does not call the scan when BlueprintStore.mod is unset', async () => {
+        const { BlueprintStore } = await import('../src/store.js');
+        const previousMod = BlueprintStore.mod;
+        BlueprintStore.mod = null;
+
+        try {
+            const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+            expect(() => hudLibrary.initialize()).not.toThrow();
+            expect(runDeferredMigrationScan).not.toHaveBeenCalled();
+        } finally {
+            // Restore singleton state so later describe blocks in this file (which rely on
+            // BlueprintStore.mod already being set from an earlier block) aren't affected.
+            BlueprintStore.mod = previousMod;
+        }
     });
 });
 

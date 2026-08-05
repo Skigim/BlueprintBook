@@ -977,6 +977,90 @@
     return { updateAvailable: false };
   }
 
+  // src/migrationScan.js
+  async function initStorageBackend(StorageImpl, app2, label) {
+    if (!StorageImpl) return null;
+    try {
+      const storage = new StorageImpl(app2);
+      await storage.initialize();
+      return storage;
+    } catch (e) {
+      console.warn(`[BlueprintBook] ${label} storage init failed:`, e);
+      return null;
+    }
+  }
+  async function runDeferredMigrationScan(mod) {
+    if (!mod || !mod.settings || mod.settings.migrationChecked) return;
+    let readFileAsync = null;
+    let listKeysAsync = null;
+    let mainStorage = null;
+    let otherStorage = null;
+    try {
+      const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
+      const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
+      const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
+      mainStorage = await initStorageBackend(PreferredImpl, mod.app, "Preferred");
+      if (!mainStorage) {
+        mainStorage = await initStorageBackend(OtherImpl, mod.app, "Fallback");
+      } else {
+        otherStorage = await initStorageBackend(OtherImpl, mod.app, "Secondary");
+      }
+      if (mainStorage || otherStorage) {
+        readFileAsync = async (filename) => {
+          for (const storage of [mainStorage, otherStorage]) {
+            if (!storage) continue;
+            try {
+              const res = await storage.readFileAsync(filename);
+              if (res) return res;
+            } catch (e) {
+            }
+          }
+          throw new Error("file_not_found");
+        };
+        listKeysAsync = async () => {
+          const keys = [];
+          for (const storage of [mainStorage, otherStorage]) {
+            if (storage && storage.database) {
+              try {
+                const storedKeys = await new Promise((resolve) => {
+                  const tx = storage.database.transaction(["files"], "readonly");
+                  const req = tx.objectStore("files").getAllKeys();
+                  req.onsuccess = () => resolve(req.result || []);
+                  req.onerror = () => resolve([]);
+                });
+                keys.push(...storedKeys);
+              } catch (e) {
+              }
+            }
+          }
+          return keys;
+        };
+      }
+      if (readFileAsync) {
+        const scanExecuted = await BlueprintStore.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+        if (scanExecuted) {
+          mod.settings.migrationChecked = true;
+          try {
+            if (mod.saveSettings) mod.saveSettings();
+          } catch (err) {
+            console.error("[BlueprintBook] Failed to save settings:", err);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
+    } finally {
+      for (const storage of [mainStorage, otherStorage]) {
+        if (storage && storage.database && typeof storage.database.close === "function") {
+          try {
+            storage.database.close();
+          } catch (e) {
+          }
+        }
+      }
+    }
+  }
+
   // src/preview.js
   function resolveBpStringMod(root) {
     if (!root) return null;
@@ -1503,6 +1587,7 @@
   }
   var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
     static hasCheckedUpdate = false;
+    static hasCheckedMigration = false;
     /** @type {HTMLDivElement|undefined} */
     background;
     visible = false;
@@ -1664,6 +1749,26 @@
       registerNativeChangelogEntry();
       this.close();
       this.checkUpdateOnce();
+      this.checkMigrationOnce();
+    }
+    /**
+     * Triggers the one-time legacy-data migration scan (real storage backend I/O), deferred
+     * here from the boot-blocking BlueprintLibraryMod.init() (src/index.js). shapez's HUD
+     * system calls initialize() exactly once per HUD part instance - unlike show(), which
+     * fires on every panel open - so this naturally runs only once per game session. The
+     * static hasCheckedMigration flag is an extra guard against initialize() somehow firing
+     * more than once on the same class (mirrors hasCheckedUpdate above); the durable
+     * one-time gate that survives across sessions is mod.settings.migrationChecked, enforced
+     * inside runDeferredMigrationScan() itself.
+     */
+    checkMigrationOnce() {
+      if (_HUDBlueprintLibrary.hasCheckedMigration) return;
+      _HUDBlueprintLibrary.hasCheckedMigration = true;
+      const mod = BlueprintStore.mod;
+      if (!mod) return;
+      runDeferredMigrationScan(mod).catch((err) => {
+        console.error("[BlueprintBook] Deferred migration scan failed:", err);
+      });
     }
     async checkUpdateOnce() {
       if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
@@ -1836,12 +1941,18 @@
         return "stop_propagation";
       }
       const selectedUids = this.root.hud.parts.massSelector.selectedUids;
-      if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
+      let selectedEntities;
+      if (selectedUids && selectedUids.size > 0) {
+        selectedEntities = Array.from(selectedUids).map((uid) => this.root.entityMgr.findByUid(uid)).filter(Boolean);
+      } else {
+        const heldBlueprint = this.root.hud.parts.blueprintPlacer?.currentBlueprint?.get?.();
+        selectedEntities = heldBlueprint?.entities;
+      }
+      if (!selectedEntities || selectedEntities.length === 0) return "stop_propagation";
       const modLoader = shapez.BlueprintLibraryModLoader;
       if (!modLoader || !Array.isArray(modLoader.mods)) return "stop_propagation";
       const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");
       if (!bpMod) return "stop_propagation";
-      const selectedEntities = Array.from(selectedUids).map((uid) => this.root.entityMgr.findByUid(uid)).filter(Boolean);
       const blueprintString = bpMod.constructor.serialize(selectedEntities);
       this.openImportDialog(blueprintString);
       return "stop_propagation";
@@ -1940,11 +2051,6 @@
             }
           } catch (e) {
             console.warn("[BlueprintBook] Clipboard write failed:", e);
-          }
-          if (this.root.keymapper?.emit) {
-            this.root.keymapper.emit("pasteBlueprintRequested");
-          } else if (this.root.keyMapper?.emit) {
-            this.root.keyMapper.emit("pasteBlueprintRequested");
           }
           if (this.root.hud?.signals?.pasteBlueprintRequested) {
             this.root.hud.signals.pasteBlueprintRequested.dispatch();
@@ -2064,11 +2170,11 @@
       if (!cached) {
         const entities2 = deserializeBlueprintEntities(this.root, bp?.value);
         const cost2 = getBlueprintCost(this.root, entities2);
-        const lockedEntities2 = getLockedEntitiesInBlueprint2(this.root, entities2);
-        cached = { entities: entities2, cost: cost2, lockedEntities: lockedEntities2 };
+        cached = { entities: entities2, cost: cost2 };
         this._cardCache.set(cacheKey, cached);
       }
-      const { entities, cost, lockedEntities } = cached;
+      const { entities, cost } = cached;
+      const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
       if (cost !== null && cost !== void 0) {
         const costElem = renderBlueprintCostElement(this.root, cost, 24);
         reqDiv.appendChild(costElem);
@@ -2167,83 +2273,10 @@
   };
 
   // src/index.js
-  async function initStorageBackend(StorageImpl, app2, label) {
-    if (!StorageImpl) return null;
-    try {
-      const storage = new StorageImpl(app2);
-      await storage.initialize();
-      return storage;
-    } catch (e) {
-      console.warn(`[BlueprintBook] ${label} storage init failed:`, e);
-      return null;
-    }
-  }
   var BlueprintLibraryMod = class extends shapez.Mod {
     async init() {
       shapez.BlueprintLibraryModLoader = this.modLoader;
-      let readFileAsync = null;
-      let listKeysAsync = null;
-      let mainStorage = null;
-      let otherStorage = null;
-      const migrationAlreadyChecked = Boolean(this.settings && this.settings.migrationChecked);
-      if (!migrationAlreadyChecked) {
-        try {
-          const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
-          const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
-          const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
-          mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
-          if (!mainStorage) {
-            mainStorage = await initStorageBackend(OtherImpl, this.app, "Fallback");
-          } else {
-            otherStorage = await initStorageBackend(OtherImpl, this.app, "Secondary");
-          }
-          if (mainStorage || otherStorage) {
-            readFileAsync = async (filename) => {
-              for (const storage of [mainStorage, otherStorage]) {
-                if (!storage) continue;
-                try {
-                  const res = await storage.readFileAsync(filename);
-                  if (res) return res;
-                } catch (e) {
-                }
-              }
-              throw new Error("file_not_found");
-            };
-            listKeysAsync = async () => {
-              const keys = [];
-              for (const storage of [mainStorage, otherStorage]) {
-                if (storage && storage.database) {
-                  try {
-                    const storedKeys = await new Promise((resolve) => {
-                      const tx = storage.database.transaction(["files"], "readonly");
-                      const req = tx.objectStore("files").getAllKeys();
-                      req.onsuccess = () => resolve(req.result || []);
-                      req.onerror = () => resolve([]);
-                    });
-                    keys.push(...storedKeys);
-                  } catch (e) {
-                  }
-                }
-              }
-              return keys;
-            };
-          }
-        } catch (e) {
-          console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
-        }
-      }
-      try {
-        await BlueprintStore.init(this, readFileAsync, listKeysAsync);
-      } finally {
-        for (const storage of [mainStorage, otherStorage]) {
-          if (storage && storage.database && typeof storage.database.close === "function") {
-            try {
-              storage.database.close();
-            } catch (e) {
-            }
-          }
-        }
-      }
+      await BlueprintStore.init(this, null, null);
       this.modInterface.registerCss(CSS);
       this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);
       this.modInterface.registerIngameKeybinding({
