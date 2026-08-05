@@ -763,11 +763,11 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         equipBtn.className = 'button styledButton good bplib-btn-equip';
         equipBtn.textContent = 'EQUIP';
         trackClick(equipBtn, () => {
-            if (lockedEntities && lockedEntities.length > 0) return;
+            if (lockedEntities.length > 0) return;
             this.equipBlueprint(bp.value);
         });
 
-        if (lockedEntities && lockedEntities.length > 0) {
+        if (lockedEntities.length > 0) {
             equipBtn.classList.add("disabled");
             equipBtn.disabled = true;
             equipBtn.title = "Contains locked buildings (unlocked at higher level)";

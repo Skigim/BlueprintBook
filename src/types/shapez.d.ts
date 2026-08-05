@@ -232,6 +232,10 @@ interface Shapez {
     Blueprint: typeof ShapezBlueprint;
     StorageImplElectron: typeof ShapezStorageImplElectron;
     StorageImplBrowserIndexedDB: typeof ShapezStorageImplBrowserIndexedDB;
+    // Re-exported from core/globals.js via modloader.js's exposeExports() - use this for
+    // IS_STANDALONE, not the bare G_IS_STANDALONE identifier (vanilla-bundle-only, never
+    // defined in a mod's own esbuild bundle).
+    BUILD_OPTIONS: { IS_STANDALONE: boolean };
     T: ShapezTranslations;
     CHANGELOG: ShapezChangelogEntry[];
 

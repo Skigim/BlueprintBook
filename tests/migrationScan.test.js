@@ -32,11 +32,12 @@ describe('runDeferredMigrationScan', () => {
             }
         };
 
-        // typeof G_IS_STANDALONE !== "undefined" is always false in this environment (no
-        // esbuild --define), same as it is in the real bundled mod - see docs/shapez_engine_notes.md.
-        // That makes StorageImplBrowserIndexedDB the "preferred" backend and
-        // StorageImplElectron the "other" one, matching real runtime behavior.
+        // shapez.BUILD_OPTIONS.IS_STANDALONE (not the bare G_IS_STANDALONE identifier - see
+        // docs/shapez_engine_notes.md) selects the preferred backend. false here makes
+        // StorageImplBrowserIndexedDB the "preferred" backend and StorageImplElectron the
+        // "other" one, matching real browser-mode runtime behavior.
         global.shapez = {
+            BUILD_OPTIONS: { IS_STANDALONE: false },
             StorageImplElectron: FakeElectronStorage,
             StorageImplBrowserIndexedDB: FakeIndexedDBStorage,
         };
@@ -161,5 +162,33 @@ describe('runDeferredMigrationScan', () => {
         expect(mod.settings.blueprints.some(bp => bp.value === 'legacy-val')).toBe(true);
         expect(mod.settings.migrationChecked).toBe(true);
         expect(mod.saveSettings).toHaveBeenCalled();
+    });
+
+    it('normalizes merged legacy blueprints with an id, createdAt, and fallback name, and advances nextBlueprintId past them', async () => {
+        FakeIndexedDBStorage.prototype.readFileAsync = async function (filename) {
+            if (filename === 'modsettings_bp-library__1.0.2.json') {
+                // Legacy entry deliberately missing id/createdAt and with a blank name, the
+                // way real pre-migration save data looks - migrateLegacySettings() merges this
+                // verbatim, so only a post-merge normalization pass fills these in.
+                return JSON.stringify({ blueprints: [{ name: '', value: 'legacy-val' }] });
+            }
+            throw new Error('file_not_found');
+        };
+        const { runDeferredMigrationScan } = await import('../src/migrationScan.js');
+        const mod = {
+            app: {},
+            meta: { version: '1.0.3' },
+            settings: { migrationChecked: false, blueprints: [], deletedValues: [], deletedNames: [], nextBlueprintId: 1 },
+            saveSettings: vi.fn(),
+        };
+
+        await runDeferredMigrationScan(mod);
+
+        const merged = mod.settings.blueprints.find(bp => bp.value === 'legacy-val');
+        expect(merged).toBeDefined();
+        expect(typeof merged.id).toBe('number');
+        expect(typeof merged.createdAt).toBe('number');
+        expect(merged.name).toBe(`Blueprint ${merged.id}`);
+        expect(mod.settings.nextBlueprintId).toBeGreaterThan(merged.id);
     });
 });

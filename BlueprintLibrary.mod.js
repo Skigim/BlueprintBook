@@ -455,6 +455,24 @@
         }
         mod.settings.migrationVersion = currentVersion;
       }
+      this.normalizeSettings(mod);
+      this.persist();
+    },
+    /**
+     * Defaults/normalizes everything in `mod.settings` that isn't the migration scan itself:
+     * `nextBlueprintId`, `availableTags` (pruned to tags actually in use), each blueprint entry
+     * (assigning `id`/`createdAt`/fallback `name` where missing), and `lastSeenVersion` /
+     * `skippedVersion`. Idempotent - safe to call again after entries have already been
+     * normalized. Shared by `init()`'s inline path and `runDeferredMigrationScan()`
+     * (`src/migrationScan.js`), which must re-run this after merging legacy blueprints so
+     * merged entries get real ids/timestamps and `nextBlueprintId` advances past them.
+     * @param {any} mod
+     */
+    normalizeSettings(mod) {
+      if (!mod || typeof mod !== "object" || !mod.settings || typeof mod.settings !== "object") return;
+      if (!Array.isArray(mod.settings.blueprints)) {
+        mod.settings.blueprints = [];
+      }
       if (typeof mod.settings.nextBlueprintId !== "number" || mod.settings.nextBlueprintId < 1) {
         mod.settings.nextBlueprintId = 1;
       }
@@ -488,7 +506,6 @@
       if (mod.settings.nextBlueprintId <= maxId) {
         mod.settings.nextBlueprintId = maxId + 1;
       }
-      this.persist();
     },
     _mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues = [], deletedNames = []) {
       if (!bp || !bp.value && !bp.name) return false;
@@ -977,6 +994,15 @@
     return { updateAvailable: false };
   }
 
+  // src/storageSelection.js
+  function selectStorageImpls(shapezGlobal) {
+    const isStandalone = Boolean(shapezGlobal.BUILD_OPTIONS.IS_STANDALONE);
+    return {
+      PreferredImpl: isStandalone ? shapezGlobal.StorageImplElectron : shapezGlobal.StorageImplBrowserIndexedDB,
+      OtherImpl: isStandalone ? shapezGlobal.StorageImplBrowserIndexedDB : shapezGlobal.StorageImplElectron
+    };
+  }
+
   // src/migrationScan.js
   async function initStorageBackend(StorageImpl, app2, label) {
     if (!StorageImpl) return null;
@@ -996,9 +1022,7 @@
     let mainStorage = null;
     let otherStorage = null;
     try {
-      const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
-      const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
-      const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
+      const { PreferredImpl, OtherImpl } = selectStorageImpls(shapez);
       mainStorage = await initStorageBackend(PreferredImpl, mod.app, "Preferred");
       if (!mainStorage) {
         mainStorage = await initStorageBackend(OtherImpl, mod.app, "Fallback");
@@ -1039,6 +1063,7 @@
       if (readFileAsync) {
         const scanExecuted = await BlueprintStore.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
         if (scanExecuted) {
+          BlueprintStore.normalizeSettings(mod);
           mod.settings.migrationChecked = true;
           try {
             if (mod.saveSettings) mod.saveSettings();
@@ -2191,10 +2216,10 @@
       equipBtn.className = "button styledButton good bplib-btn-equip";
       equipBtn.textContent = "EQUIP";
       trackClick(equipBtn, () => {
-        if (lockedEntities && lockedEntities.length > 0) return;
+        if (lockedEntities.length > 0) return;
         this.equipBlueprint(bp.value);
       });
-      if (lockedEntities && lockedEntities.length > 0) {
+      if (lockedEntities.length > 0) {
         equipBtn.classList.add("disabled");
         equipBtn.disabled = true;
         equipBtn.title = "Contains locked buildings (unlocked at higher level)";

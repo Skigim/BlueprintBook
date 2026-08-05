@@ -1,4 +1,5 @@
 import { BlueprintStore } from "./store.js";
+import { selectStorageImpls } from "./storageSelection.js";
 
 async function initStorageBackend(StorageImpl, app, label) {
     if (!StorageImpl) return null;
@@ -47,9 +48,7 @@ export async function runDeferredMigrationScan(mod) {
     let otherStorage = null;
 
     try {
-        const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
-        const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
-        const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
+        const { PreferredImpl, OtherImpl } = selectStorageImpls(shapez);
 
         mainStorage = await initStorageBackend(PreferredImpl, mod.app, "Preferred");
 
@@ -100,6 +99,10 @@ export async function runDeferredMigrationScan(mod) {
         if (readFileAsync) {
             const scanExecuted = await BlueprintStore.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
             if (scanExecuted) {
+                // migrateLegacySettings() only merges raw legacy entries - it doesn't assign
+                // id/createdAt/fallback name or advance nextBlueprintId the way init()'s inline
+                // path does. Re-run the same normalization here before persisting.
+                BlueprintStore.normalizeSettings(mod);
                 mod.settings.migrationChecked = true;
                 try {
                     if (mod.saveSettings) mod.saveSettings();
