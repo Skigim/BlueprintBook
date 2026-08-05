@@ -17,6 +17,7 @@ export const METADATA = {
         skippedVersion: "",
         deletedValues: [],
         deletedNames: [],
+        migrationChecked: false,
     },
 };
 

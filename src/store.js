@@ -1,3 +1,7 @@
+/**
+ * @param {any} mod
+ * @param {boolean|null} [forceIsDev]
+ */
 export function getActiveVersion(mod, forceIsDev = null) {
     const baseVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "1.0.3";
     const isDev = forceIsDev !== null
@@ -10,8 +14,15 @@ export function getActiveVersion(mod, forceIsDev = null) {
 }
 
 export const BlueprintStore = {
+    /** @type {any} */
     mod: null,
 
+    /**
+     * @param {any} mod
+     * @param {((filename: string) => Promise<string>)|null} readFileAsync
+     * @param {(() => Promise<string[]>)|null} listKeysAsync
+     * @param {boolean|null} forceIsDev
+     */
     async init(mod, readFileAsync = null, listKeysAsync = null, forceIsDev = null) {
         if (!mod || typeof mod !== "object") return;
         this.mod = mod;
@@ -33,7 +44,13 @@ export const BlueprintStore = {
 
         const currentVersion = getActiveVersion(mod, forceIsDev);
         if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
-            await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+            // migrationChecked is the true one-time gate: once the legacy-data scan has run
+            // once (found nothing, or migrated everything it found), never scan again, even
+            // across future version bumps. migrationVersion is still tracked for bookkeeping.
+            if (!mod.settings.migrationChecked) {
+                await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+                mod.settings.migrationChecked = true;
+            }
             mod.settings.migrationVersion = currentVersion;
         }
 
@@ -107,9 +124,11 @@ export const BlueprintStore = {
         if (typeof readFileAsync === "function") {
             reader = readFileAsync;
         } else if (typeof app !== "undefined" && app && app.storage && typeof app.storage.readFileAsync === "function") {
-            reader = (file) => app.storage.readFileAsync(file);
+            const appStorage = app.storage;
+            reader = (file) => appStorage.readFileAsync(file);
         } else if (typeof window !== "undefined" && window.app && window.app.storage && typeof window.app.storage.readFileAsync === "function") {
-            reader = (file) => window.app.storage.readFileAsync(file);
+            const windowAppStorage = window.app.storage;
+            reader = (file) => windowAppStorage.readFileAsync(file);
         }
 
         let scanExecutedSuccessfully = false;
@@ -205,6 +224,10 @@ export const BlueprintStore = {
         mod.settings.deletedNames = deletedNames;
     },
 
+    /**
+     * @param {any} mod
+     * @param {(() => Promise<string[]>)|null} [listKeysAsync]
+     */
     async getDynamicCandidateFiles(mod, listKeysAsync = null) {
         const modId = (mod && mod.meta && mod.meta.id) ? mod.meta.id : "bp-library";
         const currentVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "";
@@ -352,6 +375,9 @@ export const BlueprintStore = {
                 changed = true;
             }
         });
+        // False positive: the rule doesn't track that the forEach callback above can
+        // mutate `changed` before this check runs.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (changed) this.persist();
     },
 

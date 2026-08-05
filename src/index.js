@@ -4,6 +4,18 @@ import { BlueprintStore } from "./store.js";
 import { HUDBlueprintLibrary } from "./ui.js";
 import { extendHUDGameMenu, extendHUDKeybindingOverlay } from "../lib/ui.js";
 
+async function initStorageBackend(StorageImpl, app, label) {
+    if (!StorageImpl) return null;
+    try {
+        const storage = new StorageImpl(app);
+        await storage.initialize();
+        return storage;
+    } catch (e) {
+        console.warn(`[BlueprintBook] ${label} storage init failed:`, e);
+        return null;
+    }
+}
+
 class BlueprintLibraryMod extends shapez.Mod {
     async init() {
         // Expose the modLoader so the HUD component can access BPStrings for blueprint parsing
@@ -11,66 +23,68 @@ class BlueprintLibraryMod extends shapez.Mod {
 
         let readFileAsync = null;
         let listKeysAsync = null;
-        try {
-            const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
 
-            let idbStorage = null;
-            let electronStorage = null;
+        // BlueprintStore records migrationChecked = true the first time it has looked for
+        // (and either found+merged, or ruled out) legacy save data. Once that's happened,
+        // there's nothing left to migrate, so skip building storage backends entirely on
+        // every subsequent load instead of constructing+initializing both backends eagerly.
+        const migrationAlreadyChecked = Boolean(this.settings && this.settings.migrationChecked);
 
-            if (shapez.StorageImplBrowserIndexedDB) {
-                try {
-                    idbStorage = new shapez.StorageImplBrowserIndexedDB(this.app);
-                    await idbStorage.initialize();
-                } catch (e) {
-                    console.warn("[BlueprintBook] IDB storage init failed:", e);
+        if (!migrationAlreadyChecked) {
+            try {
+                const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
+                const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
+                const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
+
+                let mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
+                let otherStorage = null;
+
+                if (!mainStorage) {
+                    // Preferred backend failed to init entirely - use the other backend as the
+                    // real fallback instead of just for the one-time legacy-data check below.
+                    mainStorage = await initStorageBackend(OtherImpl, this.app, "Fallback");
+                } else {
+                    // Preferred backend is up. Still check the non-primary backend once, since
+                    // old data may live there (e.g. player switched browser <-> standalone).
+                    otherStorage = await initStorageBackend(OtherImpl, this.app, "Secondary");
                 }
+
+                if (mainStorage || otherStorage) {
+                    readFileAsync = async (filename) => {
+                        for (const storage of [mainStorage, otherStorage]) {
+                            if (!storage) continue;
+                            try {
+                                const res = await storage.readFileAsync(filename);
+                                if (res) return res;
+                            } catch (e) {}
+                        }
+                        throw new Error("file_not_found");
+                    };
+
+                    // Symmetric across both backends: whichever one exposes an IndexedDB-style
+                    // `.database` (only StorageImplBrowserIndexedDB does, regardless of whether
+                    // it ended up as mainStorage or otherStorage) gets its keys enumerated.
+                    listKeysAsync = async () => {
+                        const keys = [];
+                        for (const storage of [mainStorage, otherStorage]) {
+                            if (storage && storage.database) {
+                                try {
+                                    const storedKeys = await new Promise((resolve) => {
+                                        const tx = storage.database.transaction(["files"], "readonly");
+                                        const req = tx.objectStore("files").getAllKeys();
+                                        req.onsuccess = () => resolve(req.result || []);
+                                        req.onerror = () => resolve([]);
+                                    });
+                                    keys.push(...storedKeys);
+                                } catch (e) {}
+                            }
+                        }
+                        return keys;
+                    };
+                }
+            } catch (e) {
+                console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
             }
-
-            if (shapez.StorageImplElectron) {
-                try {
-                    electronStorage = new shapez.StorageImplElectron(this.app);
-                    await electronStorage.initialize();
-                } catch (e) {
-                    console.warn("[BlueprintBook] Electron storage init failed:", e);
-                }
-            }
-
-            const mainStorage = isStandalone && electronStorage ? electronStorage : (idbStorage || electronStorage);
-
-            readFileAsync = async (filename) => {
-                if (mainStorage) {
-                    try {
-                        const res = await mainStorage.readFileAsync(filename);
-                        if (res) return res;
-                    } catch (e) {}
-                }
-                const fallbackStorage = mainStorage === idbStorage ? electronStorage : idbStorage;
-                if (fallbackStorage) {
-                    try {
-                        const res = await fallbackStorage.readFileAsync(filename);
-                        if (res) return res;
-                    } catch (e) {}
-                }
-                throw new Error("file_not_found");
-            };
-
-            listKeysAsync = async () => {
-                const keys = [];
-                if (idbStorage && idbStorage.database) {
-                    try {
-                        const idbKeys = await new Promise((resolve) => {
-                            const tx = idbStorage.database.transaction(["files"], "readonly");
-                            const req = tx.objectStore("files").getAllKeys();
-                            req.onsuccess = () => resolve(req.result || []);
-                            req.onerror = () => resolve([]);
-                        });
-                        keys.push(...idbKeys);
-                    } catch (e) {}
-                }
-                return keys;
-            };
-        } catch (e) {
-            console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
         }
 
         await BlueprintStore.init(this, readFileAsync, listKeysAsync);

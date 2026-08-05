@@ -3,7 +3,9 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// Mock the global shapez object before importing ui.js
+// Mock the global shapez object before importing ui.js.
+// These members are all guaranteed-present on the real host object (frozen base-game API),
+// so ui.js accesses them directly with no defensive guards - the mock must do the same.
 global.shapez = {
     Mod: class {},
     BaseHUDPart: class {
@@ -26,7 +28,47 @@ global.shapez = {
     },
     BlueprintLibraryModLoader: {
         mods: []
-    }
+    },
+    CHANGELOG: [],
+    enumNotificationType: { info: "info", warning: "warning", error: "error", success: "success" },
+    enumHubGoalRewards: { reward_blueprints: "reward_blueprints" },
+    makeDiv: (p, id, classes, text) => {
+        const el = document.createElement("div");
+        if (id) el.id = id;
+        if (classes && Array.isArray(classes)) classes.forEach(c => el.classList.add(c));
+        if (text) el.textContent = text;
+        if (p) (p.element || p).appendChild(el);
+        return el;
+    },
+    DynamicDomAttach: class {
+        constructor(root, element, opts) {
+            this.root = root;
+            this.element = element;
+            this.opts = opts;
+        }
+        update(visible) {
+            if (visible) {
+                this.element.classList.add(this.opts.attachClass || 'visible');
+            } else {
+                this.element.classList.remove(this.opts.attachClass || 'visible');
+            }
+        }
+    },
+    InputReceiver: class {
+        constructor(id) {
+            this.id = id;
+        }
+    },
+    KeyActionMapper: class {
+        constructor(root, receiver) {
+            this.root = root;
+            this.receiver = receiver;
+        }
+        getBinding() {
+            return { add: vi.fn() };
+        }
+    },
+    T: { dialogs: {} },
 };
 
 vi.mock('../src/updater.js', () => ({
@@ -111,6 +153,19 @@ describe('HUDBlueprintLibrary Hotkeys', () => {
         expect(mockBpMod.constructor.serialize).not.toHaveBeenCalled();
         expect(hudLibrary.openImportDialog).not.toHaveBeenCalled();
     });
+
+    it('handles native save hotkey gracefully when BlueprintLibraryModLoader is unavailable', () => {
+        global.shapez.BlueprintLibraryModLoader = null;
+        mockRoot.hud.parts.massSelector.selectedUids = new Set(['entity1']);
+
+        const result = hudLibrary.handleSaveHotkey();
+
+        expect(result).toBe('stop_propagation');
+        expect(hudLibrary.openImportDialog).not.toHaveBeenCalled();
+
+        global.shapez.BlueprintLibraryModLoader = { mods: [mockBpMod] };
+    });
+
     it('handles native toggle hotkey and returns stop_propagation', () => {
         hudLibrary.show = vi.fn(() => { hudLibrary.visible = true; });
         const result = hudLibrary.handleToggleHotkey();
@@ -502,6 +557,7 @@ describe('Task 1: Blueprint Book Lockout Prevention Specs', () => {
             capturedFormOpts = opts;
             this.element = document.createElement('div');
             this.closeRequested = { add: vi.fn() };
+            this.buttonSignals = { ok: { add: vi.fn() } };
             return this;
         });
 

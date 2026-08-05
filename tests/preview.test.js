@@ -25,6 +25,7 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
         });
 
         global.shapez = global.shapez || {};
+        global.shapez.T = { dialogs: {} };
         global.shapez.Vector = class {
             constructor(x, y) { this.x = x; this.y = y; }
             sub(v) { return new global.shapez.Vector(this.x - v.x, this.y - v.y); }
@@ -406,9 +407,10 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             expect(observeMock).toHaveBeenCalledWith(container);
             expect(viewer.resizeObserver).toBeDefined();
 
-            // Verify observer callback triggers resize
+            // Verify observer callback triggers resize (real ResizeObserver always invokes
+            // its callback with a ResizeObserverEntry[], even when empty)
             const resizeSpy = vi.spyOn(viewer, 'resize');
-            if (observerCallback) observerCallback();
+            if (observerCallback) observerCallback([]);
             expect(resizeSpy).toHaveBeenCalled();
 
             viewer.cleanup();

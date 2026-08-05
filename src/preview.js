@@ -1,9 +1,8 @@
 export function resolveBpStringMod(root) {
-    const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-    if (!gShapez || !root) return null;
-    const modLoader = gShapez.BlueprintLibraryModLoader;
+    if (!root) return null;
+    const modLoader = shapez.BlueprintLibraryModLoader;
     if (!modLoader || !Array.isArray(modLoader.mods)) return null;
-    return modLoader.mods.find(m => m.metadata?.id === "bp-string") || null;
+    return modLoader.mods.find(m => m.metadata.id === "bp-string") || null;
 }
 
 export function deserializeBlueprintEntities(root, blueprintInput) {
@@ -31,9 +30,7 @@ export function getBlueprintCost(root, blueprintInput) {
     const entities = deserializeBlueprintEntities(root, blueprintInput);
     if (!entities) return null;
     try {
-        const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-        if (!gShapez || !gShapez.Blueprint) return null;
-        const bp = new gShapez.Blueprint(entities);
+        const bp = new shapez.Blueprint(entities);
         return typeof bp.getCost === "function" ? bp.getCost() : null;
     } catch {
         return null;
@@ -44,6 +41,17 @@ export function getBlueprintCost(root, blueprintInput) {
  * Manages an interactive preview canvas supporting pan, zoom, and recenter.
  */
 export class InteractiveBlueprintViewer {
+    /** @type {(e: PointerEvent) => void} */
+    onPointerDown;
+    /** @type {(e: PointerEvent) => void} */
+    onPointerMove;
+    /** @type {(e: PointerEvent) => void} */
+    onPointerUp;
+    /** @type {(e: WheelEvent) => void} */
+    onWheel;
+    dragStartX = 0;
+    dragStartY = 0;
+
     constructor(root, blueprintInput, containerElem) {
         this.root = root;
         this.blueprintInput = blueprintInput;
@@ -142,8 +150,9 @@ export class InteractiveBlueprintViewer {
 
         this.onPointerDown = (e) => {
             e.stopPropagation();
-            if (e.target && typeof e.target.setPointerCapture === "function") {
-                try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+            const target = /** @type {Element|null} */ (e.target);
+            if (target && typeof target.setPointerCapture === "function") {
+                try { target.setPointerCapture(e.pointerId); } catch (err) {}
             }
             this.isDragging = true;
             this.dragStartX = e.clientX - this.panX;
@@ -162,8 +171,9 @@ export class InteractiveBlueprintViewer {
         this.onPointerUp = (e) => {
             if (!this.isDragging) return;
             this.isDragging = false;
-            if (e.target && typeof e.target.releasePointerCapture === "function") {
-                try { e.target.releasePointerCapture(e.pointerId); } catch (err) {}
+            const target = /** @type {Element|null} */ (e.target);
+            if (target && typeof target.releasePointerCapture === "function") {
+                try { target.releasePointerCapture(e.pointerId); } catch (err) {}
             }
             this.canvas.style.cursor = "grab";
         };
@@ -193,18 +203,20 @@ export class InteractiveBlueprintViewer {
         window.addEventListener("pointerup", this.onPointerUp);
         this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
 
+        // ResizeObserver is spec-guaranteed by lib.dom.d.ts once present, but genuinely
+        // absent in older browsers - real feature detection, not dead code.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (typeof window !== "undefined" && window.ResizeObserver && this.containerElem) {
             let lastW = 0;
             let lastH = 0;
             this.resizeObserver = new ResizeObserver((entries) => {
-                const entryList = Array.isArray(entries) ? entries : (entries ? [entries] : []);
-                if (entryList.length === 0) {
+                if (entries.length === 0) {
                     this.resize();
                     return;
                 }
-                for (const entry of entryList) {
-                    const w = Math.floor(entry?.contentRect?.width || 0);
-                    const h = Math.floor(entry?.contentRect?.height || 0);
+                for (const entry of entries) {
+                    const w = Math.floor(entry.contentRect.width || 0);
+                    const h = Math.floor(entry.contentRect.height || 0);
                     if (w > 0 && h > 0 && (Math.abs(w - lastW) > 5 || Math.abs(h - lastH) > 5)) {
                         lastW = w;
                         lastH = h;
@@ -227,24 +239,23 @@ export class InteractiveBlueprintViewer {
             window.removeEventListener("pointerup", this.onPointerUp);
         }
         this.canvas.removeEventListener("wheel", this.onWheel);
-        if (this.canvas && this.canvas.parentNode) {
+        if (this.canvas.parentNode) {
             this.canvas.parentNode.removeChild(this.canvas);
         }
     }
 
     render() {
         if (!this.ctx) return;
-        const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-        if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector || !gShapez.Rectangle) return;
+        if (!shapez.DrawParameters || !shapez.Vector || !shapez.Rectangle) return;
 
         const w = this.canvas.width;
         const h = this.canvas.height;
 
-        const mapBgColor = (gShapez.THEMES && gShapez.THEMES.dark && gShapez.THEMES.dark.map && gShapez.THEMES.dark.map.background) || "#1c2333";
+        const mapBgColor = (shapez.THEMES && shapez.THEMES.dark && shapez.THEMES.dark.map && shapez.THEMES.dark.map.background) || "#1c2333";
         this.ctx.fillStyle = mapBgColor;
         this.ctx.fillRect(0, 0, w, h);
 
-        if (!this.entities || this.entities.length === 0) return;
+        if (this.entities.length === 0) return;
 
         this.ctx.save();
         this.ctx.translate(this.panX, this.panY);
@@ -252,15 +263,15 @@ export class InteractiveBlueprintViewer {
         const currentScale = this.baseScale * this.zoom;
         this.ctx.scale(currentScale, currentScale);
 
-        const parameters = new gShapez.DrawParameters({
+        const parameters = new shapez.DrawParameters({
             context: this.ctx,
-            visibleRect: new gShapez.Rectangle(-10000, -10000, 20000, 20000),
-            desiredAtlasScale: gShapez.ORIGINAL_SPRITE_SCALE || "0.75",
+            visibleRect: new shapez.Rectangle(-10000, -10000, 20000, 20000),
+            desiredAtlasScale: shapez.ORIGINAL_SPRITE_SCALE || "0.75",
             zoomLevel: currentScale,
             root: this.root
         });
 
-        const minVector = new gShapez.Vector(this.bounds.minX, this.bounds.minY);
+        const minVector = new shapez.Vector(this.bounds.minX, this.bounds.minY);
         for (let i = 0; i < this.entities.length; ++i) {
             const staticComp = this.entities[i]?.components?.StaticMapEntity;
             if (!staticComp) continue;
@@ -284,9 +295,9 @@ export class InteractiveBlueprintViewer {
 
 /**
  * Renders a blueprint cost element using the native Shapez HUD requirement pipeline.
- * @param {object} root 
- * @param {number|null} cost 
- * @param {number=} iconSize 
+ * @param {object} root
+ * @param {number|null|undefined} cost
+ * @param {number=} iconSize
  */
 export function renderBlueprintCostElement(root, cost, iconSize = 30) {
     const container = document.createElement("div");
@@ -335,8 +346,7 @@ export function renderBlueprintCostElement(root, cost, iconSize = 30) {
  * @param {function=} onEquip 
  */
 export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
-    const gShapez = (typeof globalThis !== "undefined" && globalThis.shapez) || (typeof window !== "undefined" && window.shapez);
-    if (!gShapez || !root || !blueprint) return;
+    if (!root || !blueprint) return;
 
     const entities = deserializeBlueprintEntities(root, blueprint.value || blueprint);
     const entityCount = getBlueprintEntityCount(root, entities);
@@ -356,23 +366,23 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         </div>
     `;
 
-    if (gShapez.T && gShapez.T.dialogs && gShapez.T.dialogs.buttons) {
-        gShapez.T.dialogs.buttons.equip = "EQUIP";
+    if (shapez.T.dialogs.buttons) {
+        shapez.T.dialogs.buttons.equip = "EQUIP";
     }
 
     let viewer = null;
 
-    const dialog = new gShapez.Dialog({
+    const dialog = new shapez.Dialog({
         app: root.app,
         title: blueprint.name || "Blueprint Preview",
         contentHTML: previewHtml,
         buttons: ["cancel:bad", "equip:good"]
     });
 
-    if (dialog.buttonSignals && dialog.buttonSignals.equip) {
+    if (dialog.buttonSignals.equip) {
         dialog.buttonSignals.equip.add(() => {
             const locked = getLockedEntitiesInBlueprint(root, entities || blueprint);
-            if (locked && locked.length > 0) return;
+            if (locked.length > 0) return;
             if (viewer) {
                 try { viewer.cleanup(); } catch (e) {}
             }
@@ -407,7 +417,7 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         }
 
         const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
-        if (costSlot && cost !== null && cost !== undefined) {
+        if (costSlot && cost !== null) {
             const labelSpan = document.createElement("span");
             labelSpan.className = "label bplib-preview-cost-label";
             labelSpan.textContent = "Cost:";
@@ -444,7 +454,7 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         viewer = new InteractiveBlueprintViewer(root, entities || blueprint.value, liveContainer);
 
         // Defer resize & recenter to next frame when container bounding box is rendered
-        if (typeof window !== "undefined" && window.requestAnimationFrame) {
+        if (typeof window !== "undefined") {
             window.requestAnimationFrame(() => {
                 viewer.resize();
                 viewer.recenter();
@@ -461,9 +471,11 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         }
 
         // Clean up viewer when dialog closes
-        dialog.closeRequested.add(() => {
-            try { viewer.cleanup(); } catch (e) { /* ignore */ }
-        });
+        if (dialog.closeRequested) {
+            dialog.closeRequested.add(() => {
+                try { viewer.cleanup(); } catch (e) { /* ignore */ }
+            });
+        }
     }
 }
 

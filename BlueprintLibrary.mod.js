@@ -18,7 +18,8 @@
       lastSeenVersion: "",
       skippedVersion: "",
       deletedValues: [],
-      deletedNames: []
+      deletedNames: [],
+      migrationChecked: false
     }
   };
 
@@ -421,7 +422,14 @@
     return baseVersion;
   }
   var BlueprintStore = {
+    /** @type {any} */
     mod: null,
+    /**
+     * @param {any} mod
+     * @param {((filename: string) => Promise<string>)|null} readFileAsync
+     * @param {(() => Promise<string[]>)|null} listKeysAsync
+     * @param {boolean|null} forceIsDev
+     */
     async init(mod, readFileAsync = null, listKeysAsync = null, forceIsDev = null) {
       if (!mod || typeof mod !== "object") return;
       this.mod = mod;
@@ -439,7 +447,10 @@
       }
       const currentVersion = getActiveVersion(mod, forceIsDev);
       if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
-        await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+        if (!mod.settings.migrationChecked) {
+          await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+          mod.settings.migrationChecked = true;
+        }
         mod.settings.migrationVersion = currentVersion;
       }
       if (typeof mod.settings.nextBlueprintId !== "number" || mod.settings.nextBlueprintId < 1) {
@@ -502,9 +513,11 @@
       if (typeof readFileAsync === "function") {
         reader = readFileAsync;
       } else if (typeof app !== "undefined" && app && app.storage && typeof app.storage.readFileAsync === "function") {
-        reader = (file) => app.storage.readFileAsync(file);
+        const appStorage = app.storage;
+        reader = (file) => appStorage.readFileAsync(file);
       } else if (typeof window !== "undefined" && window.app && window.app.storage && typeof window.app.storage.readFileAsync === "function") {
-        reader = (file) => window.app.storage.readFileAsync(file);
+        const windowAppStorage = window.app.storage;
+        reader = (file) => windowAppStorage.readFileAsync(file);
       }
       let scanExecutedSuccessfully = false;
       const scannedLegacyValues = /* @__PURE__ */ new Set();
@@ -592,6 +605,10 @@
       mod.settings.deletedValues = deletedValues;
       mod.settings.deletedNames = deletedNames;
     },
+    /**
+     * @param {any} mod
+     * @param {(() => Promise<string[]>)|null} [listKeysAsync]
+     */
     async getDynamicCandidateFiles(mod, listKeysAsync = null) {
       const modId = mod && mod.meta && mod.meta.id ? mod.meta.id : "bp-library";
       const currentVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "";
@@ -951,11 +968,10 @@
 
   // src/preview.js
   function resolveBpStringMod(root) {
-    const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
-    if (!gShapez || !root) return null;
-    const modLoader = gShapez.BlueprintLibraryModLoader;
+    if (!root) return null;
+    const modLoader = shapez.BlueprintLibraryModLoader;
     if (!modLoader || !Array.isArray(modLoader.mods)) return null;
-    return modLoader.mods.find((m) => m.metadata?.id === "bp-string") || null;
+    return modLoader.mods.find((m) => m.metadata.id === "bp-string") || null;
   }
   function deserializeBlueprintEntities(root, blueprintInput) {
     if (!blueprintInput) return null;
@@ -980,15 +996,23 @@
     const entities = deserializeBlueprintEntities(root, blueprintInput);
     if (!entities) return null;
     try {
-      const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
-      if (!gShapez || !gShapez.Blueprint) return null;
-      const bp = new gShapez.Blueprint(entities);
+      const bp = new shapez.Blueprint(entities);
       return typeof bp.getCost === "function" ? bp.getCost() : null;
     } catch {
       return null;
     }
   }
   var InteractiveBlueprintViewer = class {
+    /** @type {(e: PointerEvent) => void} */
+    onPointerDown;
+    /** @type {(e: PointerEvent) => void} */
+    onPointerMove;
+    /** @type {(e: PointerEvent) => void} */
+    onPointerUp;
+    /** @type {(e: WheelEvent) => void} */
+    onWheel;
+    dragStartX = 0;
+    dragStartY = 0;
     constructor(root, blueprintInput, containerElem) {
       this.root = root;
       this.blueprintInput = blueprintInput;
@@ -1074,9 +1098,13 @@
       this.canvas.style.userSelect = "none";
       this.onPointerDown = (e) => {
         e.stopPropagation();
-        if (e.target && typeof e.target.setPointerCapture === "function") {
+        const target = (
+          /** @type {Element|null} */
+          e.target
+        );
+        if (target && typeof target.setPointerCapture === "function") {
           try {
-            e.target.setPointerCapture(e.pointerId);
+            target.setPointerCapture(e.pointerId);
           } catch (err) {
           }
         }
@@ -1095,9 +1123,13 @@
       this.onPointerUp = (e) => {
         if (!this.isDragging) return;
         this.isDragging = false;
-        if (e.target && typeof e.target.releasePointerCapture === "function") {
+        const target = (
+          /** @type {Element|null} */
+          e.target
+        );
+        if (target && typeof target.releasePointerCapture === "function") {
           try {
-            e.target.releasePointerCapture(e.pointerId);
+            target.releasePointerCapture(e.pointerId);
           } catch (err) {
           }
         }
@@ -1126,14 +1158,13 @@
         let lastW = 0;
         let lastH = 0;
         this.resizeObserver = new ResizeObserver((entries) => {
-          const entryList = Array.isArray(entries) ? entries : entries ? [entries] : [];
-          if (entryList.length === 0) {
+          if (entries.length === 0) {
             this.resize();
             return;
           }
-          for (const entry of entryList) {
-            const w = Math.floor(entry?.contentRect?.width || 0);
-            const h = Math.floor(entry?.contentRect?.height || 0);
+          for (const entry of entries) {
+            const w = Math.floor(entry.contentRect.width || 0);
+            const h = Math.floor(entry.contentRect.height || 0);
             if (w > 0 && h > 0 && (Math.abs(w - lastW) > 5 || Math.abs(h - lastH) > 5)) {
               lastW = w;
               lastH = h;
@@ -1155,32 +1186,31 @@
         window.removeEventListener("pointerup", this.onPointerUp);
       }
       this.canvas.removeEventListener("wheel", this.onWheel);
-      if (this.canvas && this.canvas.parentNode) {
+      if (this.canvas.parentNode) {
         this.canvas.parentNode.removeChild(this.canvas);
       }
     }
     render() {
       if (!this.ctx) return;
-      const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
-      if (!gShapez || !gShapez.DrawParameters || !gShapez.Vector || !gShapez.Rectangle) return;
+      if (!shapez.DrawParameters || !shapez.Vector || !shapez.Rectangle) return;
       const w = this.canvas.width;
       const h = this.canvas.height;
-      const mapBgColor = gShapez.THEMES && gShapez.THEMES.dark && gShapez.THEMES.dark.map && gShapez.THEMES.dark.map.background || "#1c2333";
+      const mapBgColor = shapez.THEMES && shapez.THEMES.dark && shapez.THEMES.dark.map && shapez.THEMES.dark.map.background || "#1c2333";
       this.ctx.fillStyle = mapBgColor;
       this.ctx.fillRect(0, 0, w, h);
-      if (!this.entities || this.entities.length === 0) return;
+      if (this.entities.length === 0) return;
       this.ctx.save();
       this.ctx.translate(this.panX, this.panY);
       const currentScale = this.baseScale * this.zoom;
       this.ctx.scale(currentScale, currentScale);
-      const parameters = new gShapez.DrawParameters({
+      const parameters = new shapez.DrawParameters({
         context: this.ctx,
-        visibleRect: new gShapez.Rectangle(-1e4, -1e4, 2e4, 2e4),
-        desiredAtlasScale: gShapez.ORIGINAL_SPRITE_SCALE || "0.75",
+        visibleRect: new shapez.Rectangle(-1e4, -1e4, 2e4, 2e4),
+        desiredAtlasScale: shapez.ORIGINAL_SPRITE_SCALE || "0.75",
         zoomLevel: currentScale,
         root: this.root
       });
-      const minVector = new gShapez.Vector(this.bounds.minX, this.bounds.minY);
+      const minVector = new shapez.Vector(this.bounds.minX, this.bounds.minY);
       for (let i = 0; i < this.entities.length; ++i) {
         const staticComp = this.entities[i]?.components?.StaticMapEntity;
         if (!staticComp) continue;
@@ -1226,8 +1256,7 @@
     return container;
   }
   function openBlueprintPreviewDialog(root, blueprint, onEquip) {
-    const gShapez = typeof globalThis !== "undefined" && globalThis.shapez || typeof window !== "undefined" && window.shapez;
-    if (!gShapez || !root || !blueprint) return;
+    if (!root || !blueprint) return;
     const entities = deserializeBlueprintEntities(root, blueprint.value || blueprint);
     const entityCount = getBlueprintEntityCount(root, entities);
     const cost = getBlueprintCost(root, entities);
@@ -1244,20 +1273,20 @@
             </div>
         </div>
     `;
-    if (gShapez.T && gShapez.T.dialogs && gShapez.T.dialogs.buttons) {
-      gShapez.T.dialogs.buttons.equip = "EQUIP";
+    if (shapez.T.dialogs.buttons) {
+      shapez.T.dialogs.buttons.equip = "EQUIP";
     }
     let viewer = null;
-    const dialog = new gShapez.Dialog({
+    const dialog = new shapez.Dialog({
       app: root.app,
       title: blueprint.name || "Blueprint Preview",
       contentHTML: previewHtml,
       buttons: ["cancel:bad", "equip:good"]
     });
-    if (dialog.buttonSignals && dialog.buttonSignals.equip) {
+    if (dialog.buttonSignals.equip) {
       dialog.buttonSignals.equip.add(() => {
         const locked = getLockedEntitiesInBlueprint(root, entities || blueprint);
-        if (locked && locked.length > 0) return;
+        if (locked.length > 0) return;
         if (viewer) {
           try {
             viewer.cleanup();
@@ -1288,7 +1317,7 @@
         buttonsDiv.insertBefore(statsElem, buttonsDiv.firstChild);
       }
       const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
-      if (costSlot && cost !== null && cost !== void 0) {
+      if (costSlot && cost !== null) {
         const labelSpan = document.createElement("span");
         labelSpan.className = "label bplib-preview-cost-label";
         labelSpan.textContent = "Cost:";
@@ -1318,7 +1347,7 @@
     const liveContainer = dialog.element.querySelector(".bplib-preview-canvas-container");
     if (liveContainer) {
       viewer = new InteractiveBlueprintViewer(root, entities || blueprint.value, liveContainer);
-      if (typeof window !== "undefined" && window.requestAnimationFrame) {
+      if (typeof window !== "undefined") {
         window.requestAnimationFrame(() => {
           viewer.resize();
           viewer.recenter();
@@ -1332,12 +1361,14 @@
           recenterBtn.addEventListener("click", () => viewer.recenter());
         }
       }
-      dialog.closeRequested.add(() => {
-        try {
-          viewer.cleanup();
-        } catch (e) {
-        }
-      });
+      if (dialog.closeRequested) {
+        dialog.closeRequested.add(() => {
+          try {
+            viewer.cleanup();
+          } catch (e) {
+          }
+        });
+      }
     }
   }
   function getLockedEntitiesInBlueprint(root, blueprintInput) {
@@ -1415,26 +1446,20 @@
   var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
   // src/ui.js
-  var NOTIFY = shapez && shapez.enumNotificationType || {
-    info: "info",
-    warning: "warning",
-    error: "error",
-    success: "success"
-  };
+  var NOTIFY = shapez.enumNotificationType;
   function registerNativeChangelogEntry() {
-    if (typeof shapez !== "undefined" && shapez.CHANGELOG && Array.isArray(shapez.CHANGELOG)) {
-      const id = `Blueprint Book v${METADATA.version}`;
-      if (!shapez.CHANGELOG.some((item) => item.version === id)) {
-        const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
-        const matchingEntry = Array.isArray(MOD_CHANGELOG) ? MOD_CHANGELOG.find((item) => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer) : null;
-        const entries = getReleaseNotesForVersion(METADATA.version);
-        const date = matchingEntry && matchingEntry.date || "2026-07-24";
-        shapez.CHANGELOG.unshift({
-          version: id,
-          date,
-          entries
-        });
-      }
+    const id = `Blueprint Book v${METADATA.version}`;
+    if (!shapez.CHANGELOG.some((item) => item.version === id)) {
+      const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
+      const matchingEntry = Array.isArray(MOD_CHANGELOG) ? MOD_CHANGELOG.find((item) => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer) : null;
+      const rawEntries = getReleaseNotesForVersion(METADATA.version);
+      const entries = Array.isArray(rawEntries) ? rawEntries : [];
+      const date = matchingEntry && matchingEntry.date || "2026-07-24";
+      shapez.CHANGELOG.unshift({
+        version: id,
+        date,
+        entries
+      });
     }
   }
   function getLockedEntitiesInBlueprint2(root, entities) {
@@ -1460,24 +1485,21 @@
   }
   function isBlueprintsUnlocked(root) {
     if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
-      const reward = shapez && shapez.enumHubGoalRewards && shapez.enumHubGoalRewards.reward_blueprints || "reward_blueprints";
+      const reward = shapez.enumHubGoalRewards.reward_blueprints;
       return root.hubGoals.isRewardUnlocked(reward);
     }
     return true;
   }
   var HUDBlueprintLibrary = class _HUDBlueprintLibrary extends shapez.BaseHUDPart {
+    static hasCheckedUpdate = false;
+    /** @type {HTMLDivElement|undefined} */
+    background;
+    visible = false;
     createElements(parent = document.body) {
       this.parent = parent;
       this.activeTagFilter = null;
       this.searchQuery = "";
-      const makeDiv = shapez && shapez.makeDiv || ((p, id, classes, text) => {
-        const el = document.createElement("div");
-        if (id) el.id = id;
-        if (classes && Array.isArray(classes)) classes.forEach((c) => el.classList.add(c));
-        if (text) el.textContent = text;
-        if (p) (p.element || p).appendChild(el);
-        return el;
-      });
+      const makeDiv = shapez.makeDiv;
       this.background = makeDiv(parent, "ingame_HUD_BlueprintLibrary", ["ingameDialog"]);
       this.dialogInner = makeDiv(this.background, null, ["dialogInner", "dialogMods", "optionChooserDialog", "dialogUpgrades"]);
       this.title = makeDiv(this.dialogInner, null, ["title"], "Blueprint Book");
@@ -1503,11 +1525,15 @@
     }
     bindEvents() {
       if (!this.overlay) return;
-      const searchInput = this.overlay.querySelector("#bplib-search");
+      const searchInput = (
+        /** @type {HTMLInputElement|null} */
+        this.overlay.querySelector("#bplib-search")
+      );
       if (searchInput) {
         searchInput.onpointerdown = () => searchInput.focus();
         searchInput.addEventListener("input", (e) => {
-          this.searchQuery = e.target.value.toLowerCase();
+          this.searchQuery = /** @type {HTMLInputElement} */
+          e.target.value.toLowerCase();
           this.render();
         });
       }
@@ -1528,6 +1554,9 @@
         }
       }
     }
+    /**
+     * @param {{ title: string, desc: string, defaults?: { name?: string, tags?: string, value?: string }, textareaId?: string, onSubmit: Function }} opts
+     */
     _showBlueprintFormDialog({ title, desc, defaults = {}, textareaId = "string", onSubmit }) {
       const nameInput = new shapez.FormElementInput({
         id: "name",
@@ -1551,7 +1580,7 @@
         closeButton: false
       });
       this.root.hud.parts.dialogs.internalShowDialog(dialog);
-      if (dialog.buttonSignals && dialog.buttonSignals.ok) {
+      if (dialog.buttonSignals.ok) {
         dialog.buttonSignals.ok.add(() => {
           const name = nameInput.getValue() || "New Blueprint";
           const str = stringInput.getValue();
@@ -1603,21 +1632,22 @@
       this.visible = false;
       this.updateDialog = null;
       this.latestUpdateInfo = null;
-      if (shapez && shapez.DynamicDomAttach) {
-        this.domAttach = new shapez.DynamicDomAttach(this.root, this.background, {
+      this.domAttach = new shapez.DynamicDomAttach(
+        this.root,
+        /** @type {HTMLDivElement} */
+        this.background,
+        {
           attachClass: "visible"
-        });
-      }
-      if (shapez && shapez.InputReceiver && shapez.KeyActionMapper) {
-        this.inputReceiver = new shapez.InputReceiver("blueprintLibrary");
-        this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver);
-        if (shapez.KEYMAPPINGS) {
-          if (shapez.KEYMAPPINGS.general?.back) {
-            this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.general.back).add(this.close, this);
-          }
-          if (shapez.KEYMAPPINGS.ingame?.menuClose) {
-            this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.ingame.menuClose).add(this.close, this);
-          }
+        }
+      );
+      this.inputReceiver = new shapez.InputReceiver("blueprintLibrary");
+      this.keyActionMapper = new shapez.KeyActionMapper(this.root, this.inputReceiver);
+      if (shapez.KEYMAPPINGS) {
+        if (shapez.KEYMAPPINGS.general?.back) {
+          this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.general.back).add(this.close, this);
+        }
+        if (shapez.KEYMAPPINGS.ingame?.menuClose) {
+          this.keyActionMapper.getBinding(shapez.KEYMAPPINGS.ingame.menuClose).add(this.close, this);
         }
       }
       registerNativeChangelogEntry();
@@ -1632,7 +1662,7 @@
       const skippedVersion = BlueprintStore.getSkippedVersion();
       try {
         const update = await checkForUpdates(currentVersion);
-        if (update && update.updateAvailable) {
+        if (update.updateAvailable) {
           this.latestUpdateInfo = update;
           if (update.latestVersion !== skippedVersion) {
             this.showUpdateDialog(update);
@@ -1685,13 +1715,16 @@
         return;
       }
       const update = await checkForUpdates(METADATA.version);
-      if (update && update.updateAvailable) {
+      if (update.updateAvailable) {
         this.latestUpdateInfo = update;
         this.showUpdateDialog(update);
       } else {
         this.notify(`Blueprint Book v${METADATA.version} is up to date!`, NOTIFY.info);
       }
     }
+    /**
+     * @param {{ latestVersion?: string, downloadUrl?: string, releaseNotes?: string }} update
+     */
     showUpdateDialog({ latestVersion, downloadUrl, releaseNotes }) {
       this.latestUpdateInfo = { latestVersion, downloadUrl, releaseNotes, updateAvailable: true };
       if (this.updateDialog) {
@@ -1703,7 +1736,7 @@
         }
         this.updateDialog = null;
       }
-      if (shapez?.T?.dialogs?.buttons) {
+      if (shapez.T.dialogs.buttons) {
         shapez.T.dialogs.buttons.viewOnModIo = "VIEW ON MOD.IO";
         shapez.T.dialogs.buttons.skipVersion = "SKIP VERSION";
       }
@@ -1777,7 +1810,7 @@
     }
     showBlueprintsNotUnlocked() {
       if (this.root && this.root.hud && this.root.hud.parts && this.root.hud.parts.dialogs) {
-        const dialogsT = shapez && shapez.T && shapez.T.dialogs && shapez.T.dialogs.blueprintsNotUnlocked;
+        const dialogsT = shapez.T.dialogs.blueprintsNotUnlocked;
         const title = dialogsT && dialogsT.title || "Blueprints Locked";
         const desc = dialogsT && dialogsT.desc || "Unlocks at level 12!";
         this.root.hud.parts.dialogs.showInfo(title, desc);
@@ -1794,7 +1827,9 @@
       }
       const selectedUids = this.root.hud.parts.massSelector.selectedUids;
       if (!selectedUids || selectedUids.size === 0) return "stop_propagation";
-      const bpMod = shapez.BlueprintLibraryModLoader.mods.find((m) => m.metadata.id === "bp-string");
+      const modLoader = shapez.BlueprintLibraryModLoader;
+      if (!modLoader || !Array.isArray(modLoader.mods)) return "stop_propagation";
+      const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");
       if (!bpMod) return "stop_propagation";
       const selectedEntities = Array.from(selectedUids).map((uid) => this.root.entityMgr.findByUid(uid)).filter(Boolean);
       const blueprintString = bpMod.constructor.serialize(selectedEntities);
@@ -1810,7 +1845,7 @@
       return "stop_propagation";
     }
     cleanup() {
-      if (super.cleanup) super.cleanup();
+      super.cleanup();
       if (this.root?.app?.inputMgr && this.inputReceiver) {
         this.root.app.inputMgr.makeSureDetached(this.inputReceiver);
       }
@@ -1860,26 +1895,25 @@
         return;
       }
       try {
-        const modLoader = shapez?.BlueprintLibraryModLoader;
+        const modLoader = shapez.BlueprintLibraryModLoader;
         if (!modLoader || !Array.isArray(modLoader.mods)) {
           this.notify("Blueprint strings mod loader unavailable.", NOTIFY.error);
           return;
         }
-        const bpMod = modLoader.mods.find((m) => m?.metadata?.id === "bp-string");
-        if (!bpMod || !bpMod.constructor || typeof bpMod.constructor.deserialize !== "function") {
+        const bpMod = modLoader.mods.find((m) => m.metadata.id === "bp-string");
+        if (!bpMod || typeof bpMod.constructor.deserialize !== "function") {
           this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
           return;
         }
         const entities = bpMod.constructor.deserialize(this.root, blueprintString);
         if (entities) {
           const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
-          if (lockedEntities && lockedEntities.length > 0) {
+          if (lockedEntities.length > 0) {
             const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
-            const warningType = shapez && shapez.enumNotificationType && shapez.enumNotificationType.warning || NOTIFY.warning;
             if (this.root.hud?.parts?.notifications?.sendNotification) {
-              this.root.hud.parts.notifications.sendNotification(warningMsg, warningType);
+              this.root.hud.parts.notifications.sendNotification(warningMsg, NOTIFY.warning);
             } else {
-              this.notify(warningMsg, warningType);
+              this.notify(warningMsg, NOTIFY.warning);
             }
             return;
           }
@@ -1891,7 +1925,7 @@
             }
           }
           try {
-            if (navigator?.clipboard?.writeText) {
+            if (navigator.clipboard?.writeText) {
               await navigator.clipboard.writeText(blueprintString);
             }
           } catch (e) {
@@ -1919,14 +1953,21 @@
     render() {
       try {
         this.cleanupDynamicClickDetectors();
-        const searchInput = this.overlay ? this.overlay.querySelector("#bplib-search") : null;
+        const searchInput = (
+          /** @type {HTMLInputElement|null} */
+          this.overlay ? this.overlay.querySelector("#bplib-search") : null
+        );
         if (searchInput && searchInput.value !== (this.searchQuery || "")) {
           searchInput.value = this.searchQuery || "";
         }
         const toolbar = this.overlay ? this.overlay.querySelector("#bplib-toolbar") : null;
         if (toolbar) {
-          let updateBtn = toolbar.querySelector("#bplib-btn-update");
-          const showUpdateBtn = this.latestUpdateInfo && this.latestUpdateInfo.updateAvailable;
+          let updateBtn = (
+            /** @type {HTMLButtonElement|null} */
+            toolbar.querySelector("#bplib-btn-update")
+          );
+          const updateInfo = this.latestUpdateInfo;
+          const showUpdateBtn = updateInfo && updateInfo.updateAvailable;
           if (showUpdateBtn) {
             if (!updateBtn) {
               updateBtn = document.createElement("button");
@@ -1934,7 +1975,7 @@
               updateBtn.id = "bplib-btn-update";
               updateBtn.style.background = "#e65100";
               updateBtn.style.color = "#fff";
-              updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+              updateBtn.textContent = `Update (v${updateInfo.latestVersion})`;
               const importBtn = toolbar.querySelector("#bplib-btn-import");
               if (importBtn && importBtn.parentNode) {
                 if (importBtn.nextSibling) {
@@ -1946,7 +1987,7 @@
                 toolbar.appendChild(updateBtn);
               }
             } else {
-              updateBtn.textContent = `Update (v${this.latestUpdateInfo.latestVersion})`;
+              updateBtn.textContent = `Update (v${updateInfo.latestVersion})`;
             }
             this.trackDynamicClick(updateBtn, () => {
               this.toggleUpdateDialog();
@@ -2116,68 +2157,69 @@
   };
 
   // src/index.js
+  async function initStorageBackend(StorageImpl, app2, label) {
+    if (!StorageImpl) return null;
+    try {
+      const storage = new StorageImpl(app2);
+      await storage.initialize();
+      return storage;
+    } catch (e) {
+      console.warn(`[BlueprintBook] ${label} storage init failed:`, e);
+      return null;
+    }
+  }
   var BlueprintLibraryMod = class extends shapez.Mod {
     async init() {
       shapez.BlueprintLibraryModLoader = this.modLoader;
       let readFileAsync = null;
       let listKeysAsync = null;
-      try {
-        const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
-        let idbStorage = null;
-        let electronStorage = null;
-        if (shapez.StorageImplBrowserIndexedDB) {
-          try {
-            idbStorage = new shapez.StorageImplBrowserIndexedDB(this.app);
-            await idbStorage.initialize();
-          } catch (e) {
-            console.warn("[BlueprintBook] IDB storage init failed:", e);
+      const migrationAlreadyChecked = Boolean(this.settings && this.settings.migrationChecked);
+      if (!migrationAlreadyChecked) {
+        try {
+          const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
+          const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
+          const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
+          let mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
+          let otherStorage = null;
+          if (!mainStorage) {
+            mainStorage = await initStorageBackend(OtherImpl, this.app, "Fallback");
+          } else {
+            otherStorage = await initStorageBackend(OtherImpl, this.app, "Secondary");
           }
+          if (mainStorage || otherStorage) {
+            readFileAsync = async (filename) => {
+              for (const storage of [mainStorage, otherStorage]) {
+                if (!storage) continue;
+                try {
+                  const res = await storage.readFileAsync(filename);
+                  if (res) return res;
+                } catch (e) {
+                }
+              }
+              throw new Error("file_not_found");
+            };
+            listKeysAsync = async () => {
+              const keys = [];
+              for (const storage of [mainStorage, otherStorage]) {
+                if (storage && storage.database) {
+                  try {
+                    const storedKeys = await new Promise((resolve) => {
+                      const tx = storage.database.transaction(["files"], "readonly");
+                      const req = tx.objectStore("files").getAllKeys();
+                      req.onsuccess = () => resolve(req.result || []);
+                      req.onerror = () => resolve([]);
+                    });
+                    keys.push(...storedKeys);
+                  } catch (e) {
+                  }
+                }
+              }
+              return keys;
+            };
+          }
+        } catch (e) {
+          console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
         }
-        if (shapez.StorageImplElectron) {
-          try {
-            electronStorage = new shapez.StorageImplElectron(this.app);
-            await electronStorage.initialize();
-          } catch (e) {
-            console.warn("[BlueprintBook] Electron storage init failed:", e);
-          }
-        }
-        const mainStorage = isStandalone && electronStorage ? electronStorage : idbStorage || electronStorage;
-        readFileAsync = async (filename) => {
-          if (mainStorage) {
-            try {
-              const res = await mainStorage.readFileAsync(filename);
-              if (res) return res;
-            } catch (e) {
-            }
-          }
-          const fallbackStorage = mainStorage === idbStorage ? electronStorage : idbStorage;
-          if (fallbackStorage) {
-            try {
-              const res = await fallbackStorage.readFileAsync(filename);
-              if (res) return res;
-            } catch (e) {
-            }
-          }
-          throw new Error("file_not_found");
-        };
-        listKeysAsync = async () => {
-          const keys = [];
-          if (idbStorage && idbStorage.database) {
-            try {
-              const idbKeys = await new Promise((resolve) => {
-                const tx = idbStorage.database.transaction(["files"], "readonly");
-                const req = tx.objectStore("files").getAllKeys();
-                req.onsuccess = () => resolve(req.result || []);
-                req.onerror = () => resolve([]);
-              });
-              keys.push(...idbKeys);
-            } catch (e) {
-            }
-          }
-          return keys;
-        };
-      } catch (e) {
-        console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
       }
       await BlueprintStore.init(this, readFileAsync, listKeysAsync);
       this.modInterface.registerCss(CSS);
