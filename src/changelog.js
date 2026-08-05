@@ -43,7 +43,7 @@ export const MOD_CHANGELOG = [
 
 /**
  * @param {string} version
- * @returns {string[]|string}
+ * @returns {string[]}
  */
 export function getReleaseNotesForVersion(version) {
     const cleanVer = (version || "").toString().replace(/^v/i, "").trim();

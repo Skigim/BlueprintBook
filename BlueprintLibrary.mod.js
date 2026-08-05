@@ -448,8 +448,10 @@
       const currentVersion = getActiveVersion(mod, forceIsDev);
       if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
         if (!mod.settings.migrationChecked) {
-          await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
-          mod.settings.migrationChecked = true;
+          const scanExecuted = await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+          if (scanExecuted) {
+            mod.settings.migrationChecked = true;
+          }
         }
         mod.settings.migrationVersion = currentVersion;
       }
@@ -502,6 +504,14 @@
       }
       return false;
     },
+    /**
+     * @param {any} mod
+     * @param {((filename: string) => Promise<string>)|null} readFileAsync
+     * @param {(() => Promise<string[]>)|null} listKeysAsync
+     * @returns {Promise<boolean>} whether a legacy-data scan actually executed (a reader
+     *   was available), regardless of whether it found anything to migrate - the caller
+     *   uses this to decide whether it's safe to mark migration as checked-off for good.
+     */
     async migrateLegacySettings(mod, readFileAsync, listKeysAsync) {
       const currentBlueprints = Array.isArray(mod.settings.blueprints) ? mod.settings.blueprints : [];
       const existingValues = new Set(currentBlueprints.map((bp) => bp && bp.value).filter(Boolean));
@@ -604,6 +614,7 @@
       }
       mod.settings.deletedValues = deletedValues;
       mod.settings.deletedNames = deletedNames;
+      return scanExecutedSuccessfully;
     },
     /**
      * @param {any} mod
@@ -1154,10 +1165,11 @@
       window.addEventListener("pointermove", this.onPointerMove);
       window.addEventListener("pointerup", this.onPointerUp);
       this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
-      if (typeof window !== "undefined" && window.ResizeObserver && this.containerElem) {
+      const ResizeObserverCtor = typeof window !== "undefined" ? window.ResizeObserver : void 0;
+      if (ResizeObserverCtor && this.containerElem) {
         let lastW = 0;
         let lastH = 0;
-        this.resizeObserver = new ResizeObserver((entries) => {
+        this.resizeObserver = new ResizeObserverCtor((entries) => {
           if (entries.length === 0) {
             this.resize();
             return;
@@ -1347,7 +1359,7 @@
     const liveContainer = dialog.element.querySelector(".bplib-preview-canvas-container");
     if (liveContainer) {
       viewer = new InteractiveBlueprintViewer(root, entities || blueprint.value, liveContainer);
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
         window.requestAnimationFrame(() => {
           viewer.resize();
           viewer.recenter();
@@ -1452,8 +1464,7 @@
     if (!shapez.CHANGELOG.some((item) => item.version === id)) {
       const cleanVer = (METADATA.version || "").toString().replace(/^v/i, "").trim();
       const matchingEntry = Array.isArray(MOD_CHANGELOG) ? MOD_CHANGELOG.find((item) => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer) : null;
-      const rawEntries = getReleaseNotesForVersion(METADATA.version);
-      const entries = Array.isArray(rawEntries) ? rawEntries : [];
+      const entries = getReleaseNotesForVersion(METADATA.version);
       const date = matchingEntry && matchingEntry.date || "2026-07-24";
       shapez.CHANGELOG.unshift({
         version: id,
@@ -1677,8 +1688,7 @@
       }
     }
     showWelcomeDialog(version) {
-      const rawNotes = getReleaseNotesForVersion(version);
-      const entries = Array.isArray(rawNotes) ? rawNotes : (rawNotes || "").split("\n").map((l) => l.trim()).filter(Boolean);
+      const entries = getReleaseNotesForVersion(version);
       const notesHtml = entries.map((entry) => `<div style="margin-bottom: 6px; line-height: 1.35; padding-left: 14px; position: relative;"><span style="position: absolute; left: 0; color: #4CAF50;">\u2022</span>${entry}</div>`).join("");
       const dialog = new shapez.Dialog({
         app: this.root.app,
@@ -2173,14 +2183,15 @@
       shapez.BlueprintLibraryModLoader = this.modLoader;
       let readFileAsync = null;
       let listKeysAsync = null;
+      let mainStorage = null;
+      let otherStorage = null;
       const migrationAlreadyChecked = Boolean(this.settings && this.settings.migrationChecked);
       if (!migrationAlreadyChecked) {
         try {
           const isStandalone = typeof G_IS_STANDALONE !== "undefined" && G_IS_STANDALONE;
           const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
           const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
-          let mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
-          let otherStorage = null;
+          mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
           if (!mainStorage) {
             mainStorage = await initStorageBackend(OtherImpl, this.app, "Fallback");
           } else {
@@ -2221,7 +2232,18 @@
           console.warn("[BlueprintBook] Could not build storage reader for migration:", e);
         }
       }
-      await BlueprintStore.init(this, readFileAsync, listKeysAsync);
+      try {
+        await BlueprintStore.init(this, readFileAsync, listKeysAsync);
+      } finally {
+        for (const storage of [mainStorage, otherStorage]) {
+          if (storage && storage.database && typeof storage.database.close === "function") {
+            try {
+              storage.database.close();
+            } catch (e) {
+            }
+          }
+        }
+      }
       this.modInterface.registerCss(CSS);
       this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);
       this.modInterface.registerIngameKeybinding({

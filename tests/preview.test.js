@@ -411,7 +411,11 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             // its callback with a ResizeObserverEntry[], even when empty)
             const resizeSpy = vi.spyOn(viewer, 'resize');
             if (observerCallback) observerCallback([]);
-            expect(resizeSpy).toHaveBeenCalled();
+            expect(resizeSpy).toHaveBeenCalledTimes(1);
+
+            // Also exercise the non-empty entries branch (entry.contentRect dimension check)
+            if (observerCallback) observerCallback([{ contentRect: { width: 640, height: 480 } }]);
+            expect(resizeSpy).toHaveBeenCalledTimes(2);
 
             viewer.cleanup();
             expect(disconnectMock).toHaveBeenCalled();

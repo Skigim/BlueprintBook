@@ -44,12 +44,17 @@ export const BlueprintStore = {
 
         const currentVersion = getActiveVersion(mod, forceIsDev);
         if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
-            // migrationChecked is the true one-time gate: once the legacy-data scan has run
-            // once (found nothing, or migrated everything it found), never scan again, even
-            // across future version bumps. migrationVersion is still tracked for bookkeeping.
+            // migrationChecked is the true one-time gate: once the legacy-data scan has
+            // actually executed (found nothing, or migrated everything it found), never
+            // scan again, even across future version bumps. migrationVersion is still
+            // tracked for bookkeeping. Only set migrationChecked when the scan really ran -
+            // if no reader was available this time (e.g. storage backend init failed), we
+            // must retry on the next load instead of giving up on migration forever.
             if (!mod.settings.migrationChecked) {
-                await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
-                mod.settings.migrationChecked = true;
+                const scanExecuted = await this.migrateLegacySettings(mod, readFileAsync, listKeysAsync);
+                if (scanExecuted) {
+                    mod.settings.migrationChecked = true;
+                }
             }
             mod.settings.migrationVersion = currentVersion;
         }
@@ -110,6 +115,14 @@ export const BlueprintStore = {
         return false;
     },
 
+    /**
+     * @param {any} mod
+     * @param {((filename: string) => Promise<string>)|null} readFileAsync
+     * @param {(() => Promise<string[]>)|null} listKeysAsync
+     * @returns {Promise<boolean>} whether a legacy-data scan actually executed (a reader
+     *   was available), regardless of whether it found anything to migrate - the caller
+     *   uses this to decide whether it's safe to mark migration as checked-off for good.
+     */
     async migrateLegacySettings(mod, readFileAsync, listKeysAsync) {
         const currentBlueprints = Array.isArray(mod.settings.blueprints) ? mod.settings.blueprints : [];
         const existingValues = new Set(currentBlueprints.map(bp => bp && bp.value).filter(Boolean));
@@ -222,6 +235,8 @@ export const BlueprintStore = {
 
         mod.settings.deletedValues = deletedValues;
         mod.settings.deletedNames = deletedNames;
+
+        return scanExecutedSuccessfully;
     },
 
     /**

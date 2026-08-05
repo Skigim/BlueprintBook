@@ -92,10 +92,26 @@ interface ShapezModInstance {
     [key: string]: any;
 }
 
+interface ShapezModInterface {
+    // Patches prototype methods onto a native HUD class (see docs/shapez_engine_notes.md's
+    // "HUD Extension Pattern"); the factory receives `{ $old }` to call through to the
+    // original implementation.
+    extendClass(NativeClass: any, factory: (ctx: { $old: any }) => Record<string, any>): void;
+    registerCss(css: string): void;
+    registerHudElement(id: string, hudPartClass: any): void;
+    registerIngameKeybinding(opts: {
+        id: string;
+        keyCode: number;
+        translation: string;
+        modifiers?: Record<string, boolean>;
+        handler: (root: any, event?: any) => any;
+    }): void;
+}
+
 declare class ShapezMod {
     app: any;
     modLoader: ShapezModLoader;
-    modInterface: any;
+    modInterface: ShapezModInterface;
     // Optional: BlueprintStore.init itself defensively creates mod.settings when missing
     // (see src/store.js), proving it isn't guaranteed present before that runs.
     settings?: Record<string, any>;

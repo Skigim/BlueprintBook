@@ -23,6 +23,8 @@ class BlueprintLibraryMod extends shapez.Mod {
 
         let readFileAsync = null;
         let listKeysAsync = null;
+        let mainStorage = null;
+        let otherStorage = null;
 
         // BlueprintStore records migrationChecked = true the first time it has looked for
         // (and either found+merged, or ruled out) legacy save data. Once that's happened,
@@ -36,8 +38,7 @@ class BlueprintLibraryMod extends shapez.Mod {
                 const PreferredImpl = isStandalone ? shapez.StorageImplElectron : shapez.StorageImplBrowserIndexedDB;
                 const OtherImpl = isStandalone ? shapez.StorageImplBrowserIndexedDB : shapez.StorageImplElectron;
 
-                let mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
-                let otherStorage = null;
+                mainStorage = await initStorageBackend(PreferredImpl, this.app, "Preferred");
 
                 if (!mainStorage) {
                     // Preferred backend failed to init entirely - use the other backend as the
@@ -87,7 +88,21 @@ class BlueprintLibraryMod extends shapez.Mod {
             }
         }
 
-        await BlueprintStore.init(this, readFileAsync, listKeysAsync);
+        try {
+            await BlueprintStore.init(this, readFileAsync, listKeysAsync);
+        } finally {
+            // Release the migration-only IndexedDB connection now that we're done reading
+            // from it. storage.database is a real IDBDatabase, and IDBDatabase.close() is a
+            // standard Web API - safe to call directly, unlike guessing at a close/deinitialize
+            // method on shapez's own storage classes, which isn't part of the documented API.
+            for (const storage of [mainStorage, otherStorage]) {
+                if (storage && storage.database && typeof storage.database.close === "function") {
+                    try {
+                        storage.database.close();
+                    } catch (e) {}
+                }
+            }
+        }
 
         this.modInterface.registerCss(CSS);
         this.modInterface.registerHudElement("blueprintLibrary", HUDBlueprintLibrary);

@@ -15,8 +15,7 @@ export function registerNativeChangelogEntry() {
         const matchingEntry = Array.isArray(MOD_CHANGELOG)
             ? MOD_CHANGELOG.find(item => (item.version || "").toString().replace(/^v/i, "").trim() === cleanVer)
             : null;
-        const rawEntries = getReleaseNotesForVersion(METADATA.version);
-        const entries = Array.isArray(rawEntries) ? rawEntries : [];
+        const entries = getReleaseNotesForVersion(METADATA.version);
         const date = (matchingEntry && matchingEntry.date) || "2026-07-24";
         shapez.CHANGELOG.unshift({
             version: id,
@@ -267,10 +266,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     showWelcomeDialog(version) {
-        const rawNotes = getReleaseNotesForVersion(version);
-        const entries = Array.isArray(rawNotes)
-            ? rawNotes
-            : (rawNotes || "").split("\n").map(l => l.trim()).filter(Boolean);
+        const entries = getReleaseNotesForVersion(version);
 
         const notesHtml = entries
             .map(entry => `<div style="margin-bottom: 6px; line-height: 1.35; padding-left: 14px; position: relative;"><span style="position: absolute; left: 0; color: #4CAF50;">•</span>${entry}</div>`)

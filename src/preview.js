@@ -203,13 +203,13 @@ export class InteractiveBlueprintViewer {
         window.addEventListener("pointerup", this.onPointerUp);
         this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
 
-        // ResizeObserver is spec-guaranteed by lib.dom.d.ts once present, but genuinely
-        // absent in older browsers - real feature detection, not dead code.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (typeof window !== "undefined" && window.ResizeObserver && this.containerElem) {
+        // Use the same constructor reference we checked for existence, rather than the
+        // bare global, in case the two ever diverge (e.g. non-window global contexts).
+        const ResizeObserverCtor = typeof window !== "undefined" ? window.ResizeObserver : undefined;
+        if (ResizeObserverCtor && this.containerElem) {
             let lastW = 0;
             let lastH = 0;
-            this.resizeObserver = new ResizeObserver((entries) => {
+            this.resizeObserver = new ResizeObserverCtor((entries) => {
                 if (entries.length === 0) {
                     this.resize();
                     return;
@@ -454,7 +454,7 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         viewer = new InteractiveBlueprintViewer(root, entities || blueprint.value, liveContainer);
 
         // Defer resize & recenter to next frame when container bounding box is rendered
-        if (typeof window !== "undefined") {
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
             window.requestAnimationFrame(() => {
                 viewer.resize();
                 viewer.recenter();
