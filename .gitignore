@@ -1,6 +1,5 @@
 .memory/
 node_modules/
-shapez_source/
 tree.json
 .agents/
 AGENTS.md
