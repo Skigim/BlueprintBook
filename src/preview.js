@@ -1,8 +1,51 @@
-export function resolveBpStringMod(root) {
-    if (!root) return null;
+const INDUSTRIES_MOD_ID = "shapez-industries";
+// Cost shape keys for shapez-industries, in getCost() index order. Only index 0 is
+// reachable at runtime (gameMode.getBlueprintShapeKey()); 1 and 2 are module-private
+// in that mod's bundle, so they are mirrored here. An unresolvable key renders as an
+// amount-only row rather than failing.
+const INDUSTRIES_COST_SHAPE_KEYS = [
+    "Sb----Sb:CbCbCbCb:--CwCw--",
+    "Sb----Sb:3b3b3b3b:--3w3w--",
+    "SbSbSbSb:1b1b1b1b:--CwCw--",
+];
+
+/**
+ * Finds a mod by ID in the BlueprintLibraryModLoader.
+ * @param {string} id - The mod ID to search for
+ * @returns {object|null} The mod object if found, otherwise null
+ */
+export function findModById(id) {
     const modLoader = shapez.BlueprintLibraryModLoader;
     if (!modLoader || !Array.isArray(modLoader.mods)) return null;
-    return modLoader.mods.find(m => m.metadata.id === "bp-string") || null;
+    return modLoader.mods.find(m => m.metadata.id === id) || null;
+}
+
+/**
+ * Resolves cost shape keys for the current game mode.
+ * Returns the Industries cost shape keys if the Industries mod is loaded,
+ * otherwise returns the current game mode's blueprint shape key.
+ * @param {object} root - The game root object
+ * @returns {string[]} Array of shape keys for cost rendering
+ */
+export function resolveCostShapeKeys(root) {
+    if (findModById(INDUSTRIES_MOD_ID)) {
+        return INDUSTRIES_COST_SHAPE_KEYS;
+    }
+
+    let shapeKey = "CuCuCuCu";
+    if (root && root.gameMode && typeof root.gameMode.getBlueprintShapeKey === "function") {
+        try {
+            shapeKey = root.gameMode.getBlueprintShapeKey();
+        } catch {
+            // Fall back to default on error
+        }
+    }
+    return [shapeKey];
+}
+
+export function resolveBpStringMod(root) {
+    if (!root) return null;
+    return findModById("bp-string") || null;
 }
 
 export function deserializeBlueprintEntities(root, blueprintInput) {

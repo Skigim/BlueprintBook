@@ -5,7 +5,9 @@ import {
     getBlueprintCost,
     getLockedEntitiesInBlueprint,
     InteractiveBlueprintViewer,
-    openBlueprintPreviewDialog
+    openBlueprintPreviewDialog,
+    resolveCostShapeKeys,
+    findModById
 } from '../src/preview.js';
 
 describe('Blueprint Preview Renderer (src/preview.js)', () => {
@@ -535,6 +537,107 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             const recenterBtn = createdDialog.element.querySelector('.bplib-preview-recenter-btn');
             expect(recenterBtn).not.toBeNull();
             expect(createdDialog.trackClicks).toHaveBeenCalledWith(recenterBtn, expect.any(Function));
+        });
+    });
+
+    describe('findModById', () => {
+        it('returns the mod when found in the loader list', () => {
+            const targetMod = { metadata: { id: 'target-mod' } };
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod, targetMod]
+            };
+
+            const result = findModById('target-mod');
+            expect(result).toBe(targetMod);
+        });
+
+        it('returns null when mod is not found', () => {
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod]
+            };
+
+            const result = findModById('non-existent-mod');
+            expect(result).toBeNull();
+        });
+
+        it('returns null when BlueprintLibraryModLoader is undefined', () => {
+            delete global.shapez.BlueprintLibraryModLoader;
+
+            const result = findModById('any-mod');
+            expect(result).toBeNull();
+        });
+
+        it('returns null when mods array is not an array', () => {
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: null
+            };
+
+            const result = findModById('any-mod');
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('resolveCostShapeKeys', () => {
+        it('returns single-element array with getBlueprintShapeKey() when no Industries mod is loaded', () => {
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod]
+            };
+            mockRoot.gameMode.getBlueprintShapeKey.mockReturnValue('CuCuCuCu');
+
+            const result = resolveCostShapeKeys(mockRoot);
+            expect(result).toEqual(['CuCuCuCu']);
+        });
+
+        it('falls back to "CuCuCuCu" when getBlueprintShapeKey is absent', () => {
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod]
+            };
+            mockRoot.gameMode = {};
+
+            const result = resolveCostShapeKeys(mockRoot);
+            expect(result).toEqual(['CuCuCuCu']);
+        });
+
+        it('falls back to "CuCuCuCu" when getBlueprintShapeKey throws', () => {
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod]
+            };
+            mockRoot.gameMode.getBlueprintShapeKey.mockImplementation(() => {
+                throw new Error('getBlueprintShapeKey error');
+            });
+
+            const result = resolveCostShapeKeys(mockRoot);
+            expect(result).toEqual(['CuCuCuCu']);
+        });
+
+        it('returns all three Industries cost shape keys when Industries mod is loaded', () => {
+            const industriesMod = { metadata: { id: 'shapez-industries' } };
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod, industriesMod]
+            };
+
+            const result = resolveCostShapeKeys(mockRoot);
+            expect(result).toEqual([
+                'Sb----Sb:CbCbCbCb:--CwCw--',
+                'Sb----Sb:3b3b3b3b:--3w3w--',
+                'SbSbSbSb:1b1b1b1b:--CwCw--'
+            ]);
+        });
+
+        it('returns single-element array when BlueprintLibraryModLoader is undefined', () => {
+            delete global.shapez.BlueprintLibraryModLoader;
+            mockRoot.gameMode.getBlueprintShapeKey.mockReturnValue('CuCuCuCu');
+
+            const result = resolveCostShapeKeys(mockRoot);
+            expect(result).toEqual(['CuCuCuCu']);
+        });
+
+        it('returns single-element array when BlueprintLibraryModLoader is undefined with fallback', () => {
+            delete global.shapez.BlueprintLibraryModLoader;
+            mockRoot.gameMode = {};
+
+            const result = resolveCostShapeKeys(mockRoot);
+            expect(result).toEqual(['CuCuCuCu']);
         });
     });
 });
