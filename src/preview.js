@@ -377,45 +377,43 @@ export class InteractiveBlueprintViewer {
 /**
  * Renders a blueprint cost element using the native Shapez HUD requirement pipeline.
  * @param {object} root
- * @param {Array<{shapeKey: string|null, amount: number}>|null|undefined} cost
+ * @param {Array<{shapeKey: string|null, amount: number}>|null|undefined} costEntries
  * @param {number=} iconSize
  */
-export function renderBlueprintCostElement(root, cost, iconSize = 30) {
+export function renderBlueprintCostElement(root, costEntries, iconSize = 30) {
     const container = document.createElement("div");
     container.className = "requirements";
 
-    if (cost === null || cost === undefined) {
+    if (!Array.isArray(costEntries) || costEntries.length === 0) {
         return container;
     }
 
-    const req = document.createElement("div");
-    req.className = "requirement";
+    for (const entry of costEntries) {
+        const req = document.createElement("div");
+        req.className = "requirement";
 
-    const shapeDiv = document.createElement("div");
-    shapeDiv.className = "shape";
-
-    if (root && root.shapeDefinitionMgr && root.gameMode) {
-        try {
-            const shapeKey = typeof root.gameMode.getBlueprintShapeKey === "function"
-                ? root.gameMode.getBlueprintShapeKey()
-                : "CuCuCuCu";
-            const costShape = root.shapeDefinitionMgr.getShapeFromShortKey(shapeKey);
-            if (costShape && typeof costShape.generateAsCanvas === "function") {
-                const canvas = costShape.generateAsCanvas(iconSize);
-                shapeDiv.appendChild(canvas);
+        if (entry && entry.shapeKey && root && root.shapeDefinitionMgr) {
+            try {
+                const costShape = root.shapeDefinitionMgr.getShapeFromShortKey(entry.shapeKey);
+                if (costShape && typeof costShape.generateAsCanvas === "function") {
+                    const canvas = costShape.generateAsCanvas(iconSize);
+                    const shapeDiv = document.createElement("div");
+                    shapeDiv.className = "shape";
+                    shapeDiv.appendChild(canvas);
+                    req.appendChild(shapeDiv);
+                }
+            } catch (e) {
+                // Ignore shape canvas errors
             }
-        } catch (e) {
-            // Ignore shape canvas errors
         }
+
+        const amountDiv = document.createElement("div");
+        amountDiv.className = "amount";
+        amountDiv.textContent = `${entry ? entry.amount : ""}`;
+        req.appendChild(amountDiv);
+
+        container.appendChild(req);
     }
-
-    const amountDiv = document.createElement("div");
-    amountDiv.className = "amount";
-    amountDiv.textContent = `${cost}`;
-
-    req.appendChild(shapeDiv);
-    req.appendChild(amountDiv);
-    container.appendChild(req);
 
     return container;
 }

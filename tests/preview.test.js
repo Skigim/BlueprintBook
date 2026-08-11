@@ -6,6 +6,7 @@ import {
     getLockedEntitiesInBlueprint,
     InteractiveBlueprintViewer,
     openBlueprintPreviewDialog,
+    renderBlueprintCostElement,
     resolveCostShapeKeys,
     findModById
 } from '../src/preview.js';
@@ -537,6 +538,64 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             const recenterBtn = createdDialog.element.querySelector('.bplib-preview-recenter-btn');
             expect(recenterBtn).not.toBeNull();
             expect(createdDialog.trackClicks).toHaveBeenCalledWith(recenterBtn, expect.any(Function));
+        });
+    });
+
+    describe('renderBlueprintCostElement', () => {
+        it('renders one .requirement child per entry, with amounts in order', () => {
+            const cost = [
+                { shapeKey: 'CuCuCuCu', amount: 30 },
+                { shapeKey: 'CuCuCuCu', amount: 20 }
+            ];
+
+            const el = renderBlueprintCostElement(mockRoot, cost);
+            const requirements = el.querySelectorAll('.requirement');
+            expect(requirements.length).toBe(2);
+            expect(requirements[0].querySelector('.amount').textContent).toBe('30');
+            expect(requirements[1].querySelector('.amount').textContent).toBe('20');
+        });
+
+        it('renders a .shape child containing the generated canvas for a resolvable key', () => {
+            const canvas = document.createElement('canvas');
+            mockRoot.shapeDefinitionMgr.getShapeFromShortKey.mockReturnValue({
+                generateAsCanvas: vi.fn().mockReturnValue(canvas)
+            });
+
+            const cost = [{ shapeKey: 'CuCuCuCu', amount: 30 }];
+            const el = renderBlueprintCostElement(mockRoot, cost);
+            const req = el.querySelector('.requirement');
+            const shapeDiv = req.querySelector('.shape');
+            expect(shapeDiv).not.toBeNull();
+            expect(shapeDiv.querySelector('canvas')).toBe(canvas);
+        });
+
+        it('renders amount-only, no .shape child, when entry shapeKey is null', () => {
+            const cost = [{ shapeKey: null, amount: 15 }];
+            const el = renderBlueprintCostElement(mockRoot, cost);
+            const req = el.querySelector('.requirement');
+            expect(req.querySelector('.shape')).toBeNull();
+            expect(req.querySelector('.amount').textContent).toBe('15');
+        });
+
+        it('renders amount-only without throwing when getShapeFromShortKey fails', () => {
+            mockRoot.shapeDefinitionMgr.getShapeFromShortKey.mockImplementation(() => {
+                throw new Error('bad key');
+            });
+
+            const cost = [{ shapeKey: 'BadKey', amount: 10 }];
+            let el;
+            expect(() => { el = renderBlueprintCostElement(mockRoot, cost); }).not.toThrow();
+            const req = el.querySelector('.requirement');
+            expect(req.querySelector('.shape')).toBeNull();
+            expect(req.querySelector('.amount').textContent).toBe('10');
+        });
+
+        it('returns an empty .requirements container for null, undefined, and []', () => {
+            for (const cost of [null, undefined, []]) {
+                const el = renderBlueprintCostElement(mockRoot, cost);
+                expect(el.classList.contains('requirements')).toBe(true);
+                expect(el.querySelectorAll('.requirement').length).toBe(0);
+            }
         });
     });
 
