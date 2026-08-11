@@ -261,6 +261,7 @@
         grid-row: 2 / 3;
         display: flex;
         align-items: center;
+        gap: calc(8px * var(--ui-scale));
     }
 
     .bplib-upgrade .requirement {
@@ -378,6 +379,7 @@
         display: inline-flex;
         align-items: center;
         margin: 0;
+        gap: calc(8px * var(--ui-scale));
     }
     .bplib-preview-cost-slot .requirement {
         display: inline-flex;
@@ -1087,11 +1089,33 @@
   }
 
   // src/preview.js
-  function resolveBpStringMod(root) {
-    if (!root) return null;
+  var INDUSTRIES_MOD_ID = "shapez-industries";
+  var INDUSTRIES_COST_SHAPE_KEYS = [
+    "Sb----Sb:CbCbCbCb:--CwCw--",
+    "Sb----Sb:3b3b3b3b:--3w3w--",
+    "SbSbSbSb:1b1b1b1b:--CwCw--"
+  ];
+  function findModById(id) {
     const modLoader = shapez.BlueprintLibraryModLoader;
     if (!modLoader || !Array.isArray(modLoader.mods)) return null;
-    return modLoader.mods.find((m) => m.metadata.id === "bp-string") || null;
+    return modLoader.mods.find((m) => m.metadata.id === id) || null;
+  }
+  function resolveCostShapeKeys(root) {
+    if (findModById(INDUSTRIES_MOD_ID)) {
+      return INDUSTRIES_COST_SHAPE_KEYS;
+    }
+    let shapeKey = "CuCuCuCu";
+    if (root && root.gameMode && typeof root.gameMode.getBlueprintShapeKey === "function") {
+      try {
+        shapeKey = root.gameMode.getBlueprintShapeKey();
+      } catch {
+      }
+    }
+    return [shapeKey];
+  }
+  function resolveBpStringMod(root) {
+    if (!root) return null;
+    return findModById("bp-string") || null;
   }
   function deserializeBlueprintEntities(root, blueprintInput) {
     if (!blueprintInput) return null;
@@ -1108,16 +1132,36 @@
     const entities = deserializeBlueprintEntities(root, blueprintInput);
     return entities ? entities.length : 0;
   }
+  function normalizeBlueprintCost(root, raw) {
+    const keys = resolveCostShapeKeys(root);
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return [{ shapeKey: keys[0] ?? null, amount: raw }];
+    }
+    if (Array.isArray(raw)) {
+      const entries = [];
+      for (let i = 0; i < raw.length; ++i) {
+        const amount = raw[i];
+        if (typeof amount !== "number" || !Number.isFinite(amount) || amount === 0) continue;
+        entries.push({ shapeKey: keys[i] ?? null, amount });
+      }
+      if (entries.length === 0) {
+        return [{ shapeKey: keys[0] ?? null, amount: 0 }];
+      }
+      return entries;
+    }
+    return null;
+  }
   function getBlueprintCost(root, blueprintInput) {
     if (!root) return null;
     if (root.gameMode && typeof root.gameMode.getHasFreeCopyPaste === "function" && root.gameMode.getHasFreeCopyPaste()) {
-      return 0;
+      return normalizeBlueprintCost(root, 0);
     }
     const entities = deserializeBlueprintEntities(root, blueprintInput);
     if (!entities) return null;
     try {
       const bp = new shapez.Blueprint(entities);
-      return typeof bp.getCost === "function" ? bp.getCost() : null;
+      const raw = typeof bp.getCost === "function" ? bp.getCost() : null;
+      return normalizeBlueprintCost(root, raw);
     } catch {
       return null;
     }
@@ -1347,33 +1391,34 @@
       this.ctx.restore();
     }
   };
-  function renderBlueprintCostElement(root, cost, iconSize = 30) {
+  function renderBlueprintCostElement(root, costEntries, iconSize = 30) {
     const container = document.createElement("div");
     container.className = "requirements";
-    if (cost === null || cost === void 0) {
+    if (!Array.isArray(costEntries) || costEntries.length === 0) {
       return container;
     }
-    const req = document.createElement("div");
-    req.className = "requirement";
-    const shapeDiv = document.createElement("div");
-    shapeDiv.className = "shape";
-    if (root && root.shapeDefinitionMgr && root.gameMode) {
-      try {
-        const shapeKey = typeof root.gameMode.getBlueprintShapeKey === "function" ? root.gameMode.getBlueprintShapeKey() : "CuCuCuCu";
-        const costShape = root.shapeDefinitionMgr.getShapeFromShortKey(shapeKey);
-        if (costShape && typeof costShape.generateAsCanvas === "function") {
-          const canvas = costShape.generateAsCanvas(iconSize);
-          shapeDiv.appendChild(canvas);
+    for (const entry of costEntries) {
+      const req = document.createElement("div");
+      req.className = "requirement";
+      if (entry.shapeKey && root && root.shapeDefinitionMgr) {
+        try {
+          const costShape = root.shapeDefinitionMgr.getShapeFromShortKey(entry.shapeKey);
+          if (costShape && typeof costShape.generateAsCanvas === "function") {
+            const canvas = costShape.generateAsCanvas(iconSize);
+            const shapeDiv = document.createElement("div");
+            shapeDiv.className = "shape";
+            shapeDiv.appendChild(canvas);
+            req.appendChild(shapeDiv);
+          }
+        } catch (e) {
         }
-      } catch (e) {
       }
+      const amountDiv = document.createElement("div");
+      amountDiv.className = "amount";
+      amountDiv.textContent = `${entry.amount}`;
+      req.appendChild(amountDiv);
+      container.appendChild(req);
     }
-    const amountDiv = document.createElement("div");
-    amountDiv.className = "amount";
-    amountDiv.textContent = `${cost}`;
-    req.appendChild(shapeDiv);
-    req.appendChild(amountDiv);
-    container.appendChild(req);
     return container;
   }
   function openBlueprintPreviewDialog(root, blueprint, onEquip) {
@@ -1438,7 +1483,7 @@
         buttonsDiv.insertBefore(statsElem, buttonsDiv.firstChild);
       }
       const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
-      if (costSlot && cost !== null) {
+      if (costSlot && cost && cost.length) {
         const labelSpan = document.createElement("span");
         labelSpan.className = "label bplib-preview-cost-label";
         labelSpan.textContent = "Cost:";
@@ -2051,16 +2096,26 @@
           this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
           return;
         }
-        const entities = bpMod.constructor.deserialize(this.root, blueprintString);
+        const notifyLockedBuildings = () => {
+          const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
+          if (this.root.hud?.parts?.notifications?.sendNotification) {
+            this.root.hud.parts.notifications.sendNotification(warningMsg, NOTIFY.warning);
+          } else {
+            this.notify(warningMsg, NOTIFY.warning);
+          }
+        };
+        let entities;
+        try {
+          entities = bpMod.constructor.deserialize(this.root, blueprintString);
+        } catch (err) {
+          console.warn("[BlueprintBook] Deserialize failed during equip, treating as locked buildings:", err);
+          notifyLockedBuildings();
+          return;
+        }
         if (entities) {
           const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
           if (lockedEntities.length > 0) {
-            const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
-            if (this.root.hud?.parts?.notifications?.sendNotification) {
-              this.root.hud.parts.notifications.sendNotification(warningMsg, NOTIFY.warning);
-            } else {
-              this.notify(warningMsg, NOTIFY.warning);
-            }
+            notifyLockedBuildings();
             return;
           }
           const blueprint = new shapez.Blueprint(entities);
@@ -2200,7 +2255,7 @@
       }
       const { entities, cost } = cached;
       const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
-      if (cost !== null && cost !== void 0) {
+      if (cost && cost.length) {
         const costElem = renderBlueprintCostElement(this.root, cost, 24);
         reqDiv.appendChild(costElem);
       }

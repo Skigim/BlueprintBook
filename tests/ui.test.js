@@ -904,6 +904,34 @@ describe('async equipBlueprint', () => {
         expect(mockRoot.hud.signals.pasteBlueprintRequested.dispatch).not.toHaveBeenCalled();
     });
 
+    it('treats a deserialize() throw as locked buildings instead of a raw equip error', async () => {
+        const writeTextMock = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(global.navigator, 'clipboard', {
+            value: { writeText: writeTextMock },
+            configurable: true,
+            writable: true
+        });
+
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockImplementation(() => {
+            throw new Error("AssertionError: Unknown balancer variant: merger-inverse");
+        });
+
+        await hudLibrary.equipBlueprint('RESEARCH_GATED_BP_STRING');
+
+        expect(mockRoot.hud.parts.notifications.sendNotification).toHaveBeenCalledWith(
+            'Blueprint contains locked buildings (unlocked at later levels)',
+            expect.anything()
+        );
+        expect(mockRoot.hud.parts.blueprintPlacer.lastBlueprintUsed).toBeNull();
+        expect(mockRoot.hud.parts.blueprintPlacer.currentBlueprint.set).not.toHaveBeenCalled();
+        expect(writeTextMock).not.toHaveBeenCalled();
+        expect(mockRoot.hud.signals.pasteBlueprintRequested.dispatch).not.toHaveBeenCalled();
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+        expect(hudLibrary.close).not.toHaveBeenCalled();
+        consoleErrorSpy.mockRestore();
+    });
+
     it('_createBlueprintCard caches derived entity calculations per blueprint id and value key', () => {
         const bp = { id: 'bp_cache_1', name: 'Cache BP', value: 'CACHE_BP_VALUE', tags: [] };
         const deserializeSpy = global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize;

@@ -579,17 +579,33 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
                 this.notify("Blueprint string deserializer unavailable.", NOTIFY.error);
                 return;
             }
-            const entities = bpMod.constructor.deserialize(this.root, blueprintString);
-            
+
+            const notifyLockedBuildings = () => {
+                const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
+                if (this.root.hud?.parts?.notifications?.sendNotification) {
+                    this.root.hud.parts.notifications.sendNotification(warningMsg, NOTIFY.warning);
+                } else {
+                    this.notify(warningMsg, NOTIFY.warning);
+                }
+            };
+
+            let entities;
+            try {
+                entities = bpMod.constructor.deserialize(this.root, blueprintString);
+            } catch (err) {
+                // Some mods (e.g. shapez-industries) gate variants behind a research system and
+                // only register them once unlocked, so deserializing a blueprint that references
+                // an unresearched variant throws here rather than returning entities we could
+                // inspect for lock status. Treat that the same as a detected locked building.
+                console.warn("[BlueprintBook] Deserialize failed during equip, treating as locked buildings:", err);
+                notifyLockedBuildings();
+                return;
+            }
+
             if (entities) {
                 const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
                 if (lockedEntities.length > 0) {
-                    const warningMsg = "Blueprint contains locked buildings (unlocked at later levels)";
-                    if (this.root.hud?.parts?.notifications?.sendNotification) {
-                        this.root.hud.parts.notifications.sendNotification(warningMsg, NOTIFY.warning);
-                    } else {
-                        this.notify(warningMsg, NOTIFY.warning);
-                    }
+                    notifyLockedBuildings();
                     return;
                 }
 
