@@ -1,0 +1,331 @@
+commit 0ad392c0dce5769ea7899bcc72738b4334544892
+Merge: c5c4f9a 877027f
+Author: Skigim <dwight.harr01@outlook.com>
+Date:   Tue Aug 11 14:59:45 2026 -0500
+
+    On master: antigravity: unplanned getLockedEntitiesInBlueprint work, reverted 2026-08-11
+
+diff --cc src/preview.js
+index c2b86d2,c2b86d2..99da6c5
+--- a/src/preview.js
++++ b/src/preview.js
+@@@ -8,10 -8,10 +8,15 @@@ export function resolveBpStringMod(root
+  export function deserializeBlueprintEntities(root, blueprintInput) {
+      if (!blueprintInput) return null;
+      if (Array.isArray(blueprintInput)) return blueprintInput;
+++    const input = (typeof blueprintInput === "object" && blueprintInput !== null && typeof blueprintInput.value === "string")
+++        ? blueprintInput.value
+++        : blueprintInput;
+++    if (typeof input !== "string" || !input.trim()) return null;
+      const bpMod = resolveBpStringMod(root);
+      if (!bpMod) return null;
+      try {
+--        return bpMod.constructor.deserialize(root, blueprintInput) || null;
+++        const cleanString = input.replace(/\r\n/g, "\n").trim();
+++        return bpMod.constructor.deserialize(root, cleanString) || null;
+      } catch {
+          return null;
+      }
+@@@ -486,39 -486,39 +491,77 @@@ export function openBlueprintPreviewDia
+   * @returns {Array}
+   */
+  export function getLockedEntitiesInBlueprint(root, blueprintInput) {
+--    const input = (blueprintInput && typeof blueprintInput === "object" && !Array.isArray(blueprintInput) && blueprintInput.value)
+--        ? blueprintInput.value
+--        : blueprintInput;
+--    const entities = deserializeBlueprintEntities(root, input);
+++    const entities = deserializeBlueprintEntities(root, blueprintInput);
+      if (!entities || !Array.isArray(entities)) return [];
+  
+      const locked = [];
+      for (let i = 0; i < entities.length; ++i) {
+--        const entity = entities[i];
+--        const staticComp = entity?.components?.StaticMapEntity;
+--        if (!staticComp) continue;
+++        try {
+++            const entity = entities[i];
+++            const staticComp = entity?.components?.StaticMapEntity;
+++            if (!staticComp) continue;
+  
+--        const metaBuilding = typeof staticComp.getMetaBuilding === "function"
+--            ? staticComp.getMetaBuilding()
+--            : null;
+--        if (!metaBuilding) continue;
+++            let metaBuilding = null;
+++            try {
+++                metaBuilding = typeof staticComp.getMetaBuilding === "function"
+++                    ? staticComp.getMetaBuilding()
+++                    : null;
+++            } catch {
+++                metaBuilding = null;
+++            }
+++            if (!metaBuilding) continue;
+  
+--        const isUnlocked = typeof metaBuilding.getIsUnlocked === "function"
+--            ? metaBuilding.getIsUnlocked(root)
+--            : true;
+++            let isUnlocked = true;
+++            try {
+++                if (typeof metaBuilding.getIsUnlocked === "function") {
+++                    isUnlocked = metaBuilding.getIsUnlocked(root) !== false;
+++                }
+++            } catch (err) {
+++                console.warn("[BlueprintBook] Unlock check threw exception, failing open (unlocked):", err);
+++                isUnlocked = true;
+++            }
+  
+--        const variant = typeof staticComp.getVariant === "function"
+--            ? staticComp.getVariant()
+--            : (staticComp.variant || "default");
+++            if (!isUnlocked) {
+++                locked.push(entity);
+++                continue;
+++            }
+  
+--        const availableVariants = typeof metaBuilding.getAvailableVariants === "function"
+--            ? metaBuilding.getAvailableVariants(root)
+--            : [variant];
+++            const variant = typeof staticComp.getVariant === "function"
+++                ? staticComp.getVariant()
+++                : (staticComp.variant || "default");
+  
+--        const isVariantUnlocked = Array.isArray(availableVariants) && availableVariants.includes(variant);
+++            if (variant && variant !== "default") {
+++                let availableVariants = null;
+++                try {
+++                    if (typeof metaBuilding.getAvailableVariants === "function") {
+++                        availableVariants = metaBuilding.getAvailableVariants(root);
+++                    }
+++                } catch {
+++                    availableVariants = null;
+++                }
+++
+++                const inAvailable = Array.isArray(availableVariants) && availableVariants.includes(variant);
+++
+++                if (!inAvailable) {
+++                    let isRegisteredCode = false;
+++                    try {
+++                        const code = staticComp.code;
+++                        const shapezGlobal = typeof shapez !== "undefined" ? /** @type {any} */ (shapez) : null;
+++                        const gVariants = shapezGlobal?.gBuildingVariants || null;
+++                        if (code !== undefined && code !== null && gVariants && gVariants[code]) {
+++                            isRegisteredCode = true;
+++                        }
+++                    } catch {
+++                        isRegisteredCode = false;
+++                    }
+  
+--        if (!isUnlocked || !isVariantUnlocked) {
+--            locked.push(entity);
+++                    if (!isRegisteredCode) {
+++                        locked.push(entity);
+++                    }
+++                }
+++            }
+++        } catch (err) {
+++            console.warn("[BlueprintBook] Single entity inspection error, failing open:", err);
+          }
+      }
+      return locked;
+diff --cc src/ui.js
+index 531bef0,531bef0..96ce629
+--- a/src/ui.js
++++ b/src/ui.js
+@@@ -3,7 -3,7 +3,7 @@@ import { BlueprintStore, getActiveVersi
+  import { METADATA } from "./metadata.js";
+  import { checkForUpdates } from "./updater.js";
+  import { runDeferredMigrationScan } from "./migrationScan.js";
+--import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities } from "./preview.js";
+++import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities, getLockedEntitiesInBlueprint } from "./preview.js";
+  
+  const NOTIFY = shapez.enumNotificationType;
+  
+@@@ -26,28 -26,28 +26,6 @@@ export function registerNativeChangelog
+      }
+  }
+  
+--export function getLockedEntitiesInBlueprint(root, entities) {
+--    if (!entities || !Array.isArray(entities) || !root) return [];
+--    const locked = [];
+--    for (let i = 0; i < entities.length; i++) {
+--        const entity = entities[i];
+--        const staticComp = entity.components?.StaticMapEntity;
+--        const meta = staticComp?.getMetaBuilding ? staticComp.getMetaBuilding() : null;
+--        if (meta) {
+--            let unlocked = true;
+--            if (root.hubGoals && typeof root.hubGoals.isBuildingUnlocked === "function") {
+--                unlocked = root.hubGoals.isBuildingUnlocked(meta);
+--            } else if (typeof meta.getIsUnlocked === "function") {
+--                unlocked = meta.getIsUnlocked(root);
+--            }
+--            if (!unlocked) {
+--                locked.push(entity);
+--            }
+--        }
+--    }
+--    return locked;
+--}
+--
+  export function isBlueprintsUnlocked(root) {
+      if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
+          const reward = shapez.enumHubGoalRewards.reward_blueprints;
+@@@ -483,8 -483,8 +461,11 @@@ export class HUDBlueprintLibrary extend
+          } else {
+              // Copying a selection clears massSelector.selectedUids the instant the blueprint
+              // is created (native mass_selector.js), so fall back to the currently held blueprint.
+--            const heldBlueprint = this.root.hud.parts.blueprintPlacer?.currentBlueprint?.get?.();
+--            selectedEntities = heldBlueprint?.entities;
+++            const placer = this.root.hud.parts.blueprintPlacer;
+++            const currentBp = typeof placer?.currentBlueprint?.get === "function"
+++                ? placer.currentBlueprint.get()
+++                : placer?.currentBlueprint;
+++            selectedEntities = currentBp?.entities;
+          }
+  
+          if (!selectedEntities || selectedEntities.length === 0) return "stop_propagation";
+diff --cc tests/preview.test.js
+index ec2441c,ec2441c..76b4012
+--- a/tests/preview.test.js
++++ b/tests/preview.test.js
+@@@ -272,10 -272,10 +272,11 @@@ describe('Blueprint Preview Renderer (s
+              expect(locked[0]).toBe(lockedEntity);
+          });
+  
+--        it('identifies entities locked by variant status', () => {
+++        it('identifies entities locked by variant status when variant is not in availableVariants and not in gBuildingVariants', () => {
+              const lockedVariantEntity = {
+                  components: {
+                      StaticMapEntity: {
+++                        code: 99999,
+                          getVariant: () => 'rotatable',
+                          getMetaBuilding: () => ({
+                              getIsUnlocked: vi.fn().mockReturnValue(true),
+@@@ -290,6 -290,6 +291,58 @@@
+              expect(locked).toHaveLength(1);
+              expect(locked[0]).toBe(lockedVariantEntity);
+          });
+++
+++        it('Approach B: treats registered building codes as unlocked when base building is unlocked even if filtered from getAvailableVariants (e.g. hide-mirrored setting)', () => {
+++            global.shapez.gBuildingVariants = {
+++                123: { variant: 'mirrored' }
+++            };
+++
+++            const toolbarHiddenEntity = {
+++                components: {
+++                    StaticMapEntity: {
+++                        code: 123,
+++                        getVariant: () => 'mirrored',
+++                        getMetaBuilding: () => ({
+++                            getIsUnlocked: vi.fn().mockReturnValue(true),
+++                            // Toolbar mod filtered 'mirrored' out of getAvailableVariants:
+++                            getAvailableVariants: vi.fn().mockReturnValue(['default'])
+++                        })
+++                    }
+++                }
+++            };
+++            mockBpMod.constructor.deserialize.mockReturnValueOnce([toolbarHiddenEntity]);
+++
+++            const locked = getLockedEntitiesInBlueprint(mockRoot, 'BP_STRING');
+++            expect(locked).toEqual([]);
+++        });
+++
+++        it('Fail-open policy: treats missing or throwing getIsUnlocked methods as unlocked and logs console.warn', () => {
+++            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+++
+++            const throwingEntity = {
+++                components: {
+++                    StaticMapEntity: {
+++                        code: 1,
+++                        getVariant: () => 'default',
+++                        getMetaBuilding: () => ({
+++                            getIsUnlocked: () => { throw new Error('Mod unlock error'); },
+++                            getAvailableVariants: () => ['default']
+++                        })
+++                    }
+++                }
+++            };
+++            mockBpMod.constructor.deserialize.mockReturnValueOnce([throwingEntity]);
+++
+++            expect(() => getLockedEntitiesInBlueprint(mockRoot, 'BP_STRING')).not.toThrow();
+++            const locked = getLockedEntitiesInBlueprint(mockRoot, 'BP_STRING');
+++            expect(locked).toEqual([]);
+++            expect(warnSpy).toHaveBeenCalledWith(
+++                '[BlueprintBook] Unlock check threw exception, failing open (unlocked):',
+++                expect.any(Error)
+++            );
+++
+++            warnSpy.mockRestore();
+++        });
+      });
+  
+      describe('InteractiveBlueprintViewer', () => {
+diff --cc tests/ui.test.js
+index c813c80,c813c80..1d4819d
+--- a/tests/ui.test.js
++++ b/tests/ui.test.js
+@@@ -882,15 -882,15 +882,18 @@@ describe('async equipBlueprint', () => 
+              writable: true
+          });
+  
+++        const isUnlockedMock = vi.fn().mockReturnValue(false);
+          const lockedEntity = {
+              components: {
+                  StaticMapEntity: {
+--                    getMetaBuilding: () => ({ id: 'locked_building' })
+++                    getMetaBuilding: () => ({
+++                        id: 'locked_building',
+++                        getIsUnlocked: isUnlockedMock
+++                    })
+                  }
+              }
+          };
+          global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
+--        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+  
+          await hudLibrary.equipBlueprint('LOCKED_BP_STRING');
+  
+@@@ -926,21 -926,21 +929,24 @@@
+          // Regression: caching {entities, cost, lockedEntities} together kept a card's locked
+          // state frozen from its first render, even after the player leveled up mid-session.
+          const bp = { id: 'bp_progression', name: 'Progression BP', value: 'PROGRESSION_BP_VALUE', tags: [] };
+++        const isUnlockedMock = vi.fn().mockReturnValue(false);
+          const gatedEntity = {
+              components: {
+                  StaticMapEntity: {
+--                    getMetaBuilding: () => ({ id: 'gated_building' })
+++                    getMetaBuilding: () => ({
+++                        id: 'gated_building',
+++                        getIsUnlocked: isUnlockedMock
+++                    })
+                  }
+              }
+          };
+          global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([gatedEntity]);
+--        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+  
+          let card = hudLibrary._createBlueprintCard(bp, () => {});
+          expect(card.querySelector('.bplib-btn-equip').disabled).toBe(true);
+  
+          // Player levels up and unlocks the building; the blueprint's id/value haven't changed.
+--        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(true);
+++        isUnlockedMock.mockReturnValue(true);
+  
+          card = hudLibrary._createBlueprintCard(bp, () => {});
+          expect(card.querySelector('.bplib-btn-equip').disabled).toBe(false);
+@@@ -950,12 -950,12 +956,14 @@@
+          const lockedEntity = {
+              components: {
+                  StaticMapEntity: {
+--                    getMetaBuilding: () => ({ id: 'locked_building' })
+++                    getMetaBuilding: () => ({
+++                        id: 'locked_building',
+++                        getIsUnlocked: vi.fn().mockReturnValue(false)
+++                    })
+                  }
+              }
+          };
+          global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
+--        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
+  
+          const bp = { id: 'bp_locked', name: 'Locked BP', value: 'LOCKED_BP_STRING', tags: [] };
+          const card = hudLibrary._createBlueprintCard(bp, () => {});
