@@ -392,7 +392,7 @@ export function renderBlueprintCostElement(root, costEntries, iconSize = 30) {
         const req = document.createElement("div");
         req.className = "requirement";
 
-        if (entry && entry.shapeKey && root && root.shapeDefinitionMgr) {
+        if (entry.shapeKey && root && root.shapeDefinitionMgr) {
             try {
                 const costShape = root.shapeDefinitionMgr.getShapeFromShortKey(entry.shapeKey);
                 if (costShape && typeof costShape.generateAsCanvas === "function") {
@@ -409,7 +409,7 @@ export function renderBlueprintCostElement(root, costEntries, iconSize = 30) {
 
         const amountDiv = document.createElement("div");
         amountDiv.className = "amount";
-        amountDiv.textContent = `${entry ? entry.amount : ""}`;
+        amountDiv.textContent = `${entry.amount}`;
         req.appendChild(amountDiv);
 
         container.appendChild(req);
