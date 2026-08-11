@@ -65,16 +65,54 @@ export function getBlueprintEntityCount(root, blueprintInput) {
     return entities ? entities.length : 0;
 }
 
+/**
+ * Normalizes the raw return value of Blueprint.getCost() into a canonical shape,
+ * covering both vanilla shapez (a single number) and shapez-industries (an array
+ * of per-shape amounts).
+ * @param {object} root - The game root object
+ * @param {*} raw - The raw value returned by Blueprint.getCost()
+ * @returns {Array<{shapeKey: string|null, amount: number}>|null}
+ */
+function normalizeBlueprintCost(root, raw) {
+    const keys = resolveCostShapeKeys(root);
+
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+        return [{ shapeKey: keys[0] ?? null, amount: raw }];
+    }
+
+    if (Array.isArray(raw)) {
+        const entries = [];
+        for (let i = 0; i < raw.length; ++i) {
+            const amount = raw[i];
+            if (typeof amount !== "number" || !Number.isFinite(amount) || amount === 0) continue;
+            entries.push({ shapeKey: keys[i] ?? null, amount });
+        }
+        if (entries.length === 0) {
+            return [{ shapeKey: keys[0] ?? null, amount: 0 }];
+        }
+        return entries;
+    }
+
+    return null;
+}
+
+/**
+ * Computes and normalizes a blueprint's cost.
+ * @param {object} root - The game root object
+ * @param {*} blueprintInput - Serialized blueprint string or entity array
+ * @returns {Array<{shapeKey: string|null, amount: number}>|null}
+ */
 export function getBlueprintCost(root, blueprintInput) {
     if (!root) return null;
     if (root.gameMode && typeof root.gameMode.getHasFreeCopyPaste === "function" && root.gameMode.getHasFreeCopyPaste()) {
-        return 0;
+        return normalizeBlueprintCost(root, 0);
     }
     const entities = deserializeBlueprintEntities(root, blueprintInput);
     if (!entities) return null;
     try {
         const bp = new shapez.Blueprint(entities);
-        return typeof bp.getCost === "function" ? bp.getCost() : null;
+        const raw = typeof bp.getCost === "function" ? bp.getCost() : null;
+        return normalizeBlueprintCost(root, raw);
     } catch {
         return null;
     }
@@ -339,7 +377,7 @@ export class InteractiveBlueprintViewer {
 /**
  * Renders a blueprint cost element using the native Shapez HUD requirement pipeline.
  * @param {object} root
- * @param {number|null|undefined} cost
+ * @param {Array<{shapeKey: string|null, amount: number}>|null|undefined} cost
  * @param {number=} iconSize
  */
 export function renderBlueprintCostElement(root, cost, iconSize = 30) {

@@ -640,6 +640,110 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             expect(result).toEqual(['CuCuCuCu']);
         });
     });
+
+    describe('getBlueprintCost', () => {
+        it('normalizes a numeric getCost() into a single-entry array using the blueprint shape key', () => {
+            global.shapez.Blueprint = class {
+                constructor(entities) { this.entities = entities; }
+                getCost() { return 42; }
+            };
+
+            const result = getBlueprintCost(mockRoot, 'VALID_BP_STRING');
+            expect(result).toEqual([{ shapeKey: 'CuCuCuCu', amount: 42 }]);
+        });
+
+        it('normalizes an array getCost() into entries with Industries keys, dropping zero amounts', () => {
+            const industriesMod = { metadata: { id: 'shapez-industries' } };
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod, industriesMod]
+            };
+            global.shapez.Blueprint = class {
+                constructor(entities) { this.entities = entities; }
+                getCost() { return [30, 20, 0]; }
+            };
+
+            const result = getBlueprintCost(mockRoot, 'VALID_BP_STRING');
+            expect(result).toEqual([
+                { shapeKey: 'Sb----Sb:CbCbCbCb:--CwCw--', amount: 30 },
+                { shapeKey: 'Sb----Sb:3b3b3b3b:--3w3w--', amount: 20 }
+            ]);
+        });
+
+        it('collapses an all-zero cost array into a single zero entry so it still renders', () => {
+            const industriesMod = { metadata: { id: 'shapez-industries' } };
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod, industriesMod]
+            };
+            global.shapez.Blueprint = class {
+                constructor(entities) { this.entities = entities; }
+                getCost() { return [0, 0, 0]; }
+            };
+
+            const result = getBlueprintCost(mockRoot, 'VALID_BP_STRING');
+            expect(result).toEqual([
+                { shapeKey: 'Sb----Sb:CbCbCbCb:--CwCw--', amount: 0 }
+            ]);
+        });
+
+        it('returns a single zero entry for free copy/paste, matching prior zero-cost parity', () => {
+            mockRoot.gameMode.getHasFreeCopyPaste.mockReturnValue(true);
+
+            const result = getBlueprintCost(mockRoot, 'VALID_BP_STRING');
+            expect(result).toEqual([{ shapeKey: 'CuCuCuCu', amount: 0 }]);
+        });
+
+        it('returns null when getCost() throws', () => {
+            global.shapez.Blueprint = class {
+                constructor(entities) { this.entities = entities; }
+                getCost() { throw new Error('boom'); }
+            };
+
+            const result = getBlueprintCost(mockRoot, 'VALID_BP_STRING');
+            expect(result).toBeNull();
+        });
+
+        it('returns null when entities fail to deserialize', () => {
+            mockBpMod.constructor.deserialize.mockReturnValueOnce(null);
+
+            const result = getBlueprintCost(mockRoot, 'INVALID_BP_STRING');
+            expect(result).toBeNull();
+        });
+
+        it('returns null when getCost() returns a non-numeric, non-array value', () => {
+            global.shapez.Blueprint = class {
+                constructor(entities) { this.entities = entities; }
+                getCost() { return { totally: 'not a cost' }; }
+            };
+
+            expect(getBlueprintCost(mockRoot, 'VALID_BP_STRING')).toBeNull();
+
+            global.shapez.Blueprint = class {
+                constructor(entities) { this.entities = entities; }
+                getCost() { return NaN; }
+            };
+
+            expect(getBlueprintCost(mockRoot, 'VALID_BP_STRING')).toBeNull();
+        });
+
+        it('assigns shapeKey: null to surplus entries beyond the known key list', () => {
+            const industriesMod = { metadata: { id: 'shapez-industries' } };
+            global.shapez.BlueprintLibraryModLoader = {
+                mods: [mockBpMod, industriesMod]
+            };
+            global.shapez.Blueprint = class {
+                constructor(entities) { this.entities = entities; }
+                getCost() { return [10, 10, 10, 10]; }
+            };
+
+            const result = getBlueprintCost(mockRoot, 'VALID_BP_STRING');
+            expect(result).toEqual([
+                { shapeKey: 'Sb----Sb:CbCbCbCb:--CwCw--', amount: 10 },
+                { shapeKey: 'Sb----Sb:3b3b3b3b:--3w3w--', amount: 10 },
+                { shapeKey: 'SbSbSbSb:1b1b1b1b:--CwCw--', amount: 10 },
+                { shapeKey: null, amount: 10 }
+            ]);
+        });
+    });
 });
 
 
