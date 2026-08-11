@@ -222,6 +222,29 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             expect(() => openBlueprintPreviewDialog(mockRoot, undefined)).not.toThrow();
             expect(mockRoot.hud.parts.dialogs.internalShowDialog).not.toHaveBeenCalled();
         });
+
+        it('renders exactly one .requirement with the same amount text as before for a vanilla-numeric cost', () => {
+            let createdDialog = null;
+            global.shapez.Dialog = vi.fn().mockImplementation(function (opts) {
+                const el = document.createElement('div');
+                el.innerHTML = opts.contentHTML;
+                this.element = el;
+                this.dialogElem = document.createElement('div');
+                this.buttonSignals = { equip: { add: vi.fn() } };
+                this.closeRequested = { add: vi.fn() };
+                createdDialog = this;
+                return this;
+            });
+
+            const bp = { id: 'bp1', name: 'Numeric Cost Blueprint', value: 'VALID_BP_STRING' };
+            openBlueprintPreviewDialog(mockRoot, bp);
+
+            const costSlot = createdDialog.element.querySelector('.bplib-preview-cost-slot');
+            expect(costSlot).not.toBeNull();
+            const requirements = costSlot.querySelectorAll('.requirement');
+            expect(requirements.length).toBe(1);
+            expect(requirements[0].querySelector('.amount').textContent).toBe('42');
+        });
     });
 
     describe('getLockedEntitiesInBlueprint', () => {

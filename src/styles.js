@@ -236,6 +236,7 @@ export const CSS = `
         grid-row: 2 / 3;
         display: flex;
         align-items: center;
+        gap: calc(8px * var(--ui-scale));
     }
 
     .bplib-upgrade .requirement {
@@ -353,6 +354,7 @@ export const CSS = `
         display: inline-flex;
         align-items: center;
         margin: 0;
+        gap: calc(8px * var(--ui-scale));
     }
     .bplib-preview-cost-slot .requirement {
         display: inline-flex;

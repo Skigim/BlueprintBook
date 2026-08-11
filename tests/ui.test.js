@@ -997,6 +997,72 @@ describe('async equipBlueprint', () => {
     });
 });
 
+describe('_createBlueprintCard cost element rendering', () => {
+    let mockRoot;
+    let hudLibrary;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+
+        mockRoot = {
+            app: {},
+            hubGoals: {
+                isRewardUnlocked: vi.fn().mockReturnValue(true),
+                isBuildingUnlocked: vi.fn().mockReturnValue(true)
+            },
+            shapeDefinitionMgr: {
+                getShapeFromShortKey: vi.fn().mockReturnValue({
+                    generateAsCanvas: vi.fn().mockReturnValue(document.createElement('canvas'))
+                })
+            },
+            hud: {
+                parts: {
+                    dialogs: { internalShowDialog: vi.fn(), closeDialog: vi.fn() }
+                },
+                signals: { notification: { dispatch: vi.fn() } }
+            }
+        };
+
+        global.shapez.BlueprintLibraryModLoader = {
+            mods: [{
+                metadata: { id: 'bp-string' },
+                constructor: {
+                    deserialize: vi.fn().mockReturnValue([{ uid: 1, components: {} }])
+                }
+            }]
+        };
+
+        const { HUDBlueprintLibrary } = await import('../src/ui.js');
+        hudLibrary = new HUDBlueprintLibrary(mockRoot);
+    });
+
+    it('appends a cost element with exactly one .requirement for a vanilla-numeric cost', () => {
+        global.shapez.Blueprint = class {
+            constructor(entities) { this.entities = entities; }
+            getCost() { return 30; }
+        };
+
+        const bp = { id: 'bp_cost', name: 'Cost BP', value: 'COST_BP_VALUE', tags: [] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+
+        const requirements = card.querySelectorAll('.requirement');
+        expect(requirements.length).toBe(1);
+        expect(requirements[0].querySelector('.amount').textContent).toBe('30');
+    });
+
+    it('skips appending any .requirement when cost resolves to null', () => {
+        global.shapez.Blueprint = class {
+            constructor(entities) { this.entities = entities; }
+            // No getCost() method: getBlueprintCost() falls through to a null raw cost.
+        };
+
+        const bp = { id: 'bp_nocost', name: 'No Cost BP', value: 'NOCOST_BP_VALUE', tags: [] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+
+        expect(card.querySelectorAll('.requirement').length).toBe(0);
+    });
+});
+
 describe('isBlueprintsUnlocked', () => {
     it('returns true (fail-open) when root or hubGoals is null/undefined', () => {
         expect(isBlueprintsUnlocked(null)).toBe(true);

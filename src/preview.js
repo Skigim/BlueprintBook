@@ -496,7 +496,7 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         }
 
         const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
-        if (costSlot && cost !== null) {
+        if (costSlot && cost && cost.length) {
             const labelSpan = document.createElement("span");
             labelSpan.className = "label bplib-preview-cost-label";
             labelSpan.textContent = "Cost:";

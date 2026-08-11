@@ -744,7 +744,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         // must be recomputed on every render even though entities/cost are stable.
         const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
 
-        if (cost !== null && cost !== undefined) {
+        if (cost && cost.length) {
             const costElem = renderBlueprintCostElement(this.root, cost, 24);
             reqDiv.appendChild(costElem);
         }
