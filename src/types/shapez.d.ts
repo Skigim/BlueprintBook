@@ -256,6 +256,7 @@ interface Shapez {
     Rectangle?: new (x: number, y: number, w: number, h: number) => any;
     THEMES?: { dark?: { map?: { background?: string } } };
     ORIGINAL_SPRITE_SCALE?: string | number;
+    gBuildingVariants?: Record<string | number, unknown>; // Live building-codes registry (dev/standalone-only).
 
     // lib/ui.js engine-extension surface.
     ModInterface: any;
