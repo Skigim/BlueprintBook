@@ -257,6 +257,10 @@ interface Shapez {
     THEMES?: { dark?: { map?: { background?: string } } };
     ORIGINAL_SPRITE_SCALE?: string | number;
     gBuildingVariants?: Record<string | number, unknown>; // Live building-codes registry (dev/standalone-only).
+    // Live meta-building singleton registry (dev/standalone-only, same exposure path as
+    // gBuildingVariants). findById returns whichever instance is currently registered for
+    // that building id — including one patched by another mod.
+    gMetaBuildingRegistry?: { findById(id: string): { getAvailableVariants?(root: unknown): unknown } | null };
 
     // lib/ui.js engine-extension surface.
     ModInterface: any;

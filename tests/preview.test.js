@@ -9,7 +9,9 @@ import {
     openBlueprintPreviewDialog,
     renderBlueprintCostElement,
     resolveCostShapeKeys,
-    findModById
+    findModById,
+    classifyDeserializeFailure,
+    logDeserializeFailure
 } from '../src/preview.js';
 
 describe('Blueprint Preview Renderer (src/preview.js)', () => {
@@ -774,6 +776,114 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             let result;
             expect(() => { result = deserializeBlueprintEntities(mockRoot, 'RESEARCH_GATED_BP_STRING'); }).not.toThrow();
             expect(result).toEqual({ entities: null, failedDueToUnlock: true });
+        });
+    });
+
+    describe('classifyDeserializeFailure', () => {
+        it('classifies as "locked" when the error names a variant absent from the building registry\'s available variants', () => {
+            global.shapez.gMetaBuildingRegistry = {
+                findById: vi.fn().mockReturnValue({
+                    getAvailableVariants: vi.fn().mockReturnValue(['default', 'merger'])
+                })
+            };
+            const err = new Error('AssertionError: Unknown balancer variant: splitter');
+
+            const result = classifyDeserializeFailure(mockRoot, err);
+
+            expect(result).toEqual({ kind: 'locked', buildingId: 'balancer', variant: 'splitter' });
+        });
+
+        it('classifies as "likely-incompatibility" when the error names a variant the registry reports as available', () => {
+            global.shapez.gMetaBuildingRegistry = {
+                findById: vi.fn().mockReturnValue({
+                    getAvailableVariants: vi.fn().mockReturnValue(['default', 'merger', 'splitter'])
+                })
+            };
+            const err = new Error('AssertionError: Unknown balancer variant: splitter');
+
+            const result = classifyDeserializeFailure(mockRoot, err);
+
+            expect(result).toEqual({ kind: 'likely-incompatibility', buildingId: 'balancer', variant: 'splitter' });
+        });
+
+        it('classifies as "unrecognized" when the error message does not match the "Unknown X variant: Y" pattern', () => {
+            const err = new TypeError("Cannot read properties of undefined (reading 'code')");
+
+            const result = classifyDeserializeFailure(mockRoot, err);
+
+            expect(result).toEqual({ kind: 'unrecognized', buildingId: null, variant: null });
+        });
+
+        it('classifies as "unrecognized" (but keeps the parsed buildingId/variant) when the registry is unavailable', () => {
+            delete global.shapez.gMetaBuildingRegistry;
+            const err = new Error('AssertionError: Unknown balancer variant: splitter');
+
+            const result = classifyDeserializeFailure(mockRoot, err);
+
+            expect(result).toEqual({ kind: 'unrecognized', buildingId: 'balancer', variant: 'splitter' });
+        });
+
+        it('classifies as "unrecognized" when the registry lookup throws', () => {
+            global.shapez.gMetaBuildingRegistry = {
+                findById: vi.fn().mockImplementation(() => { throw new Error('registry not ready'); })
+            };
+            const err = new Error('AssertionError: Unknown balancer variant: splitter');
+
+            const result = classifyDeserializeFailure(mockRoot, err);
+
+            expect(result).toEqual({ kind: 'unrecognized', buildingId: 'balancer', variant: 'splitter' });
+        });
+    });
+
+    describe('logDeserializeFailure', () => {
+        it('logs a "not currently unlocked" warning for kind "locked"', () => {
+            const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            global.shapez.gMetaBuildingRegistry = {
+                findById: vi.fn().mockReturnValue({
+                    getAvailableVariants: vi.fn().mockReturnValue(['default'])
+                })
+            };
+            const err = new Error('AssertionError: Unknown balancer variant: splitter');
+
+            logDeserializeFailure(mockRoot, err);
+
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                "[BlueprintBook] Blueprint deserialize failed: balancer:splitter is not in this building's currently available variants — treating as locked/unresearched content.",
+                err
+            );
+            consoleWarnSpy.mockRestore();
+        });
+
+        it('logs a "likely a compatibility issue" warning for kind "likely-incompatibility"', () => {
+            const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            global.shapez.gMetaBuildingRegistry = {
+                findById: vi.fn().mockReturnValue({
+                    getAvailableVariants: vi.fn().mockReturnValue(['default', 'splitter'])
+                })
+            };
+            const err = new Error('AssertionError: Unknown balancer variant: splitter');
+
+            logDeserializeFailure(mockRoot, err);
+
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                "[BlueprintBook] Blueprint deserialize failed: balancer:splitter IS listed as available, so this isn't a content lock — likely a compatibility issue with another mod's building patch. Treating as locked anyway (fail-open) so equip stays blocked rather than crashing.",
+                err
+            );
+            consoleWarnSpy.mockRestore();
+        });
+
+        it('logs an "unrecognized reason" warning for kind "unrecognized"', () => {
+            const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            delete global.shapez.gMetaBuildingRegistry;
+            const err = new TypeError("Cannot read properties of undefined (reading 'code')");
+
+            logDeserializeFailure(mockRoot, err);
+
+            expect(consoleWarnSpy).toHaveBeenCalledWith(
+                "[BlueprintBook] Blueprint deserialize failed for an unrecognized reason — treating as locked (fail-open).",
+                err
+            );
+            consoleWarnSpy.mockRestore();
         });
     });
 

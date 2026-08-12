@@ -56,13 +56,86 @@ export function deserializeBlueprintEntities(root, blueprintInput) {
     try {
         const entities = bpMod.constructor.deserialize(root, blueprintInput) || null;
         return { entities, failedDueToUnlock: false };
-    } catch {
+    } catch (err) {
         // Any exception here means the string parsed to content the game can't
-        // currently construct (e.g. an unresearched shapez-industries variant) —
-        // or, less commonly, the string is corrupt. We can't robustly tell those
-        // apart without coupling to a specific mod's error wording, so both are
-        // surfaced identically as "may be locked," not silently as "no entities."
+        // currently construct (e.g. an unresearched variant, or a cross-mod
+        // incompatibility) rather than corrupt data — logDeserializeFailure makes
+        // a best-effort attempt to tell those apart; either way it's surfaced
+        // identically as "may be locked," not silently as "no entities."
+        logDeserializeFailure(root, err);
         return { entities: null, failedDueToUnlock: true };
+    }
+}
+
+/**
+ * Attempts to explain why a blueprint deserialize threw, by parsing the vanilla
+ * "Unknown <buildingId> variant: <variant>" assertion convention (see
+ * shapez_source/src/js/game/buildings/balancer.js) out of the error message and
+ * cross-checking it against the currently-registered building's own
+ * getAvailableVariants(root) — the same live instance any mod (e.g.
+ * shapez-industries) may have patched, reached via shapez.gMetaBuildingRegistry
+ * (exposed the same way shapez.gBuildingVariants is, per mods/modloader.js's
+ * exposeExports()).
+ *
+ * This can only ever be a best-effort heuristic: it depends on the throwing code
+ * following that message convention, so a mod that words its own assertions
+ * differently degrades to "unrecognized" rather than a wrong classification.
+ * @param {object} root
+ * @param {*} err - Whatever the catch clause bound; a thrown value isn't guaranteed to be an Error.
+ * @returns {{ kind: 'locked'|'likely-incompatibility'|'unrecognized', buildingId: string|null, variant: string|null }}
+ */
+export function classifyDeserializeFailure(root, err) {
+    const message = err && typeof err.message === "string" ? err.message : "";
+    const match = message.match(/Unknown (\w+) variant: (\S+)/);
+    if (!match) {
+        return { kind: "unrecognized", buildingId: null, variant: null };
+    }
+    const [, buildingId, variant] = match;
+
+    try {
+        const registry = (typeof shapez !== "undefined" && shapez.gMetaBuildingRegistry) || null;
+        const metaBuilding = registry && typeof registry.findById === "function"
+            ? registry.findById(buildingId)
+            : null;
+        const availableVariants = metaBuilding && typeof metaBuilding.getAvailableVariants === "function"
+            ? metaBuilding.getAvailableVariants(root)
+            : null;
+        if (Array.isArray(availableVariants)) {
+            return {
+                kind: availableVariants.includes(variant) ? "likely-incompatibility" : "locked",
+                buildingId,
+                variant
+            };
+        }
+    } catch {
+        // Registry unavailable or lookup failed — fall through to unrecognized below.
+    }
+    return { kind: "unrecognized", buildingId, variant };
+}
+
+/**
+ * Logs a blueprint deserialize failure with a message distinguishing a genuine
+ * content lock from a likely cross-mod incompatibility, per classifyDeserializeFailure.
+ * @param {object} root
+ * @param {*} err - Whatever the catch clause bound; a thrown value isn't guaranteed to be an Error.
+ */
+export function logDeserializeFailure(root, err) {
+    const { kind, buildingId, variant } = classifyDeserializeFailure(root, err);
+    if (kind === "locked") {
+        console.warn(
+            `[BlueprintBook] Blueprint deserialize failed: ${buildingId}:${variant} is not in this building's currently available variants — treating as locked/unresearched content.`,
+            err
+        );
+    } else if (kind === "likely-incompatibility") {
+        console.warn(
+            `[BlueprintBook] Blueprint deserialize failed: ${buildingId}:${variant} IS listed as available, so this isn't a content lock — likely a compatibility issue with another mod's building patch. Treating as locked anyway (fail-open) so equip stays blocked rather than crashing.`,
+            err
+        );
+    } else {
+        console.warn(
+            "[BlueprintBook] Blueprint deserialize failed for an unrecognized reason — treating as locked (fail-open).",
+            err
+        );
     }
 }
 
