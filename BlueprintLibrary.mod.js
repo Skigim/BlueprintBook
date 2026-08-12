@@ -417,7 +417,7 @@
   // src/store.js
   function getActiveVersion(mod, forceIsDev = null) {
     const baseVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "1.0.3";
-    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(false) : Boolean(mod && mod.meta && mod.meta.isDev);
+    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(true) : Boolean(mod && mod.meta && mod.meta.isDev);
     if (isDev) {
       return `${baseVersion}-dev.${Date.now()}`;
     }
@@ -1118,18 +1118,19 @@
     return findModById("bp-string") || null;
   }
   function deserializeBlueprintEntities(root, blueprintInput) {
-    if (!blueprintInput) return null;
-    if (Array.isArray(blueprintInput)) return blueprintInput;
+    if (!blueprintInput) return { entities: null, failedDueToUnlock: false };
+    if (Array.isArray(blueprintInput)) return { entities: blueprintInput, failedDueToUnlock: false };
     const bpMod = resolveBpStringMod(root);
-    if (!bpMod) return null;
+    if (!bpMod) return { entities: null, failedDueToUnlock: false };
     try {
-      return bpMod.constructor.deserialize(root, blueprintInput) || null;
+      const entities = bpMod.constructor.deserialize(root, blueprintInput) || null;
+      return { entities, failedDueToUnlock: false };
     } catch {
-      return null;
+      return { entities: null, failedDueToUnlock: true };
     }
   }
   function getBlueprintEntityCount(root, blueprintInput) {
-    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    const { entities } = deserializeBlueprintEntities(root, blueprintInput);
     return entities ? entities.length : 0;
   }
   function normalizeBlueprintCost(root, raw) {
@@ -1156,7 +1157,7 @@
     if (root.gameMode && typeof root.gameMode.getHasFreeCopyPaste === "function" && root.gameMode.getHasFreeCopyPaste()) {
       return normalizeBlueprintCost(root, 0);
     }
-    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    const { entities } = deserializeBlueprintEntities(root, blueprintInput);
     if (!entities) return null;
     try {
       const bp = new shapez.Blueprint(entities);
@@ -1200,7 +1201,7 @@
     initEntities() {
       if (!this.root) return;
       try {
-        this.entities = deserializeBlueprintEntities(this.root, this.blueprintInput) || [];
+        this.entities = deserializeBlueprintEntities(this.root, this.blueprintInput).entities || [];
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (let i = 0; i < this.entities.length; ++i) {
           const staticComp = this.entities[i]?.components?.StaticMapEntity;
@@ -1423,8 +1424,9 @@
   }
   function openBlueprintPreviewDialog(root, blueprint, onEquip) {
     if (!root || !blueprint) return;
-    const entities = deserializeBlueprintEntities(root, blueprint.value || blueprint);
+    const { entities, failedDueToUnlock } = deserializeBlueprintEntities(root, blueprint.value || blueprint);
     const entityCount = getBlueprintEntityCount(root, entities);
+    const entityCountDisplay = failedDueToUnlock ? "?" : entityCount;
     const cost = getBlueprintCost(root, entities);
     const previewHtml = `
         <div class="bplib-preview-dialog-content">
@@ -1433,7 +1435,7 @@
             </div>
             <div class="bplib-preview-footer">
                 <div class="bplib-preview-stats">
-                    <div class="stat-item"><span class="label">Buildings:</span> <strong>${entityCount}</strong></div>
+                    <div class="stat-item"><span class="label">Buildings:</span> <strong>${entityCountDisplay}</strong></div>
                     <div class="stat-item bplib-preview-cost-slot"></div>
                 </div>
             </div>
@@ -1483,7 +1485,16 @@
         buttonsDiv.insertBefore(statsElem, buttonsDiv.firstChild);
       }
       const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
-      if (costSlot && cost && cost.length) {
+      if (costSlot && failedDueToUnlock) {
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "label bplib-preview-cost-label";
+        labelSpan.textContent = "Cost:";
+        costSlot.appendChild(labelSpan);
+        const unknownSpan = document.createElement("span");
+        unknownSpan.className = "bplib-preview-cost-unknown";
+        unknownSpan.textContent = "unknown";
+        costSlot.appendChild(unknownSpan);
+      } else if (costSlot && cost && cost.length) {
         const labelSpan = document.createElement("span");
         labelSpan.className = "label bplib-preview-cost-label";
         labelSpan.textContent = "Cost:";
@@ -1539,21 +1550,42 @@
   }
   function getLockedEntitiesInBlueprint(root, blueprintInput) {
     const input = blueprintInput && typeof blueprintInput === "object" && !Array.isArray(blueprintInput) && blueprintInput.value ? blueprintInput.value : blueprintInput;
-    const entities = deserializeBlueprintEntities(root, input);
+    const { entities, failedDueToUnlock } = deserializeBlueprintEntities(root, input);
+    if (failedDueToUnlock) return [{ __unresolvable: true }];
     if (!entities || !Array.isArray(entities)) return [];
     const locked = [];
     for (let i = 0; i < entities.length; ++i) {
-      const entity = entities[i];
-      const staticComp = entity?.components?.StaticMapEntity;
-      if (!staticComp) continue;
-      const metaBuilding = typeof staticComp.getMetaBuilding === "function" ? staticComp.getMetaBuilding() : null;
-      if (!metaBuilding) continue;
-      const isUnlocked = typeof metaBuilding.getIsUnlocked === "function" ? metaBuilding.getIsUnlocked(root) : true;
-      const variant = typeof staticComp.getVariant === "function" ? staticComp.getVariant() : staticComp.variant || "default";
-      const availableVariants = typeof metaBuilding.getAvailableVariants === "function" ? metaBuilding.getAvailableVariants(root) : [variant];
-      const isVariantUnlocked = Array.isArray(availableVariants) && availableVariants.includes(variant);
-      if (!isUnlocked || !isVariantUnlocked) {
-        locked.push(entity);
+      try {
+        const entity = entities[i];
+        const staticComp = entity?.components?.StaticMapEntity;
+        if (!staticComp) continue;
+        const code = staticComp.code;
+        const metaBuilding = typeof staticComp.getMetaBuilding === "function" ? staticComp.getMetaBuilding() : null;
+        if (!metaBuilding) continue;
+        let isUnlocked = true;
+        try {
+          isUnlocked = typeof metaBuilding.getIsUnlocked === "function" ? metaBuilding.getIsUnlocked(root) : true;
+        } catch (err) {
+          console.warn("[BlueprintBook] Unlock check threw exception, failing open (unlocked):", err);
+          isUnlocked = true;
+        }
+        const variant = typeof staticComp.getVariant === "function" ? staticComp.getVariant() : staticComp.variant || "default";
+        const availableVariants = typeof metaBuilding.getAvailableVariants === "function" ? metaBuilding.getAvailableVariants(root) : [variant];
+        let isVariantUnlocked = Array.isArray(availableVariants) && availableVariants.includes(variant);
+        if (!isVariantUnlocked) {
+          try {
+            const gVariants = typeof shapez !== "undefined" && shapez.gBuildingVariants || null;
+            if (code !== void 0 && code !== null && gVariants && gVariants[code]) {
+              isVariantUnlocked = true;
+            }
+          } catch {
+          }
+        }
+        if (!isUnlocked || !isVariantUnlocked) {
+          locked.push(entity);
+        }
+      } catch (err) {
+        console.warn("[BlueprintBook] Entity inspection error, failing open:", err);
       }
     }
     return locked;
@@ -1626,27 +1658,6 @@
         entries
       });
     }
-  }
-  function getLockedEntitiesInBlueprint2(root, entities) {
-    if (!entities || !Array.isArray(entities) || !root) return [];
-    const locked = [];
-    for (let i = 0; i < entities.length; i++) {
-      const entity = entities[i];
-      const staticComp = entity.components?.StaticMapEntity;
-      const meta = staticComp?.getMetaBuilding ? staticComp.getMetaBuilding() : null;
-      if (meta) {
-        let unlocked = true;
-        if (root.hubGoals && typeof root.hubGoals.isBuildingUnlocked === "function") {
-          unlocked = root.hubGoals.isBuildingUnlocked(meta);
-        } else if (typeof meta.getIsUnlocked === "function") {
-          unlocked = meta.getIsUnlocked(root);
-        }
-        if (!unlocked) {
-          locked.push(entity);
-        }
-      }
-    }
-    return locked;
   }
   function isBlueprintsUnlocked(root) {
     if (root && root.hubGoals && typeof root.hubGoals.isRewardUnlocked === "function") {
@@ -2113,7 +2124,7 @@
           return;
         }
         if (entities) {
-          const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
+          const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
           if (lockedEntities.length > 0) {
             notifyLockedBuildings();
             return;
@@ -2248,14 +2259,22 @@
       const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
       let cached = this._cardCache.get(cacheKey);
       if (!cached) {
-        const entities2 = deserializeBlueprintEntities(this.root, bp?.value);
+        const { entities: entities2, failedDueToUnlock: failedDueToUnlock2 } = deserializeBlueprintEntities(this.root, bp?.value);
         const cost2 = getBlueprintCost(this.root, entities2);
-        cached = { entities: entities2, cost: cost2 };
+        cached = { entities: entities2, cost: cost2, failedDueToUnlock: failedDueToUnlock2 };
         this._cardCache.set(cacheKey, cached);
       }
-      const { entities, cost } = cached;
-      const lockedEntities = getLockedEntitiesInBlueprint2(this.root, entities);
-      if (cost && cost.length) {
+      const { entities, cost, failedDueToUnlock } = cached;
+      const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities || bp?.value);
+      if (failedDueToUnlock) {
+        const unknownDiv = document.createElement("div");
+        unknownDiv.className = "requirement bplib-cost-unknown";
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "label";
+        labelSpan.textContent = "Cost: unknown";
+        unknownDiv.appendChild(labelSpan);
+        reqDiv.appendChild(unknownDiv);
+      } else if (cost && cost.length) {
         const costElem = renderBlueprintCostElement(this.root, cost, 24);
         reqDiv.appendChild(costElem);
       }
