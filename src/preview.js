@@ -435,6 +435,7 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
 
     const { entities, failedDueToUnlock } = deserializeBlueprintEntities(root, blueprint.value || blueprint);
     const entityCount = getBlueprintEntityCount(root, entities);
+    const entityCountDisplay = failedDueToUnlock ? "?" : entityCount;
     const cost = getBlueprintCost(root, entities);
 
     const previewHtml = `
@@ -444,7 +445,7 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
             </div>
             <div class="bplib-preview-footer">
                 <div class="bplib-preview-stats">
-                    <div class="stat-item"><span class="label">Buildings:</span> <strong>${entityCount}</strong></div>
+                    <div class="stat-item"><span class="label">Buildings:</span> <strong>${entityCountDisplay}</strong></div>
                     <div class="stat-item bplib-preview-cost-slot"></div>
                 </div>
             </div>
@@ -502,7 +503,17 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
         }
 
         const costSlot = dialog.element.querySelector(".bplib-preview-cost-slot");
-        if (costSlot && cost && cost.length) {
+        if (costSlot && failedDueToUnlock) {
+            const labelSpan = document.createElement("span");
+            labelSpan.className = "label bplib-preview-cost-label";
+            labelSpan.textContent = "Cost:";
+            costSlot.appendChild(labelSpan);
+
+            const unknownSpan = document.createElement("span");
+            unknownSpan.className = "bplib-preview-cost-unknown";
+            unknownSpan.textContent = "unknown";
+            costSlot.appendChild(unknownSpan);
+        } else if (costSlot && cost && cost.length) {
             const labelSpan = document.createElement("span");
             labelSpan.className = "label bplib-preview-cost-label";
             labelSpan.textContent = "Cost:";

@@ -246,6 +246,69 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             expect(requirements.length).toBe(1);
             expect(requirements[0].querySelector('.amount').textContent).toBe('42');
         });
+
+        it('shows "Buildings: ?" and "Cost: unknown" when deserialize fails due to locked/unresearched content', () => {
+            let createdDialog = null;
+            global.shapez.Dialog = vi.fn().mockImplementation(function (opts) {
+                const el = document.createElement('div');
+                el.innerHTML = opts.contentHTML;
+                this.element = el;
+                this.dialogElem = document.createElement('div');
+                this.buttonSignals = { equip: { add: vi.fn() } };
+                this.closeRequested = { add: vi.fn() };
+                createdDialog = this;
+                return this;
+            });
+
+            mockBpMod.constructor.deserialize.mockImplementation(() => {
+                throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+            });
+
+            const bp = { id: 'bp1', name: 'Research Gated Blueprint', value: 'RESEARCH_GATED_BP_STRING' };
+            openBlueprintPreviewDialog(mockRoot, bp);
+
+            const statsContainer = createdDialog.element.querySelector('.bplib-preview-stats');
+            expect(statsContainer.textContent).toContain('?');
+
+            const costSlot = createdDialog.element.querySelector('.bplib-preview-cost-slot');
+            expect(costSlot.textContent).toContain('unknown');
+        });
+
+        it('disables EQUIP button when deserialize fails due to locked/unresearched content', () => {
+            let createdDialog = null;
+            global.shapez.Dialog = vi.fn().mockImplementation(function (opts) {
+                const el = document.createElement('div');
+                el.innerHTML = opts.contentHTML;
+                const buttonsDiv = document.createElement('div');
+                buttonsDiv.className = 'buttons';
+                (opts.buttons || []).forEach(b => {
+                    const [name, style] = b.split(':');
+                    const btn = document.createElement('button');
+                    btn.className = `button styledButton ${style || ''}`;
+                    btn.dataset.button = name;
+                    btn.textContent = name.toUpperCase();
+                    buttonsDiv.appendChild(btn);
+                });
+                el.appendChild(buttonsDiv);
+
+                this.element = el;
+                this.dialogElem = document.createElement('div');
+                this.buttonSignals = { equip: { add: vi.fn() } };
+                this.closeRequested = { add: vi.fn() };
+                createdDialog = this;
+                return this;
+            });
+
+            mockBpMod.constructor.deserialize.mockImplementation(() => {
+                throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+            });
+
+            const bp = { id: 'bp1', name: 'Research Gated Blueprint', value: 'RESEARCH_GATED_BP_STRING' };
+            openBlueprintPreviewDialog(mockRoot, bp);
+
+            const equipBtn = createdDialog.element.querySelector('.buttons button.good, .buttons button[data-button="equip"], button.good');
+            expect(equipBtn.disabled).toBe(true);
+        });
     });
 
     describe('getLockedEntitiesInBlueprint', () => {
