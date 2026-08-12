@@ -424,7 +424,7 @@
   // src/store.js
   function getActiveVersion(mod, forceIsDev = null) {
     const baseVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : "1.0.3";
-    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(true) : Boolean(mod && mod.meta && mod.meta.isDev);
+    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(false) : Boolean(mod && mod.meta && mod.meta.isDev);
     if (isDev) {
       return `${baseVersion}-dev.${Date.now()}`;
     }
@@ -1132,8 +1132,50 @@
     try {
       const entities = bpMod.constructor.deserialize(root, blueprintInput) || null;
       return { entities, failedDueToUnlock: false };
-    } catch {
+    } catch (err) {
+      logDeserializeFailure(root, err);
       return { entities: null, failedDueToUnlock: true };
+    }
+  }
+  function classifyDeserializeFailure(root, err) {
+    const message = err && typeof err.message === "string" ? err.message : "";
+    const match = message.match(/Unknown (\w+) variant: (\S+)/);
+    if (!match) {
+      return { kind: "unrecognized", buildingId: null, variant: null };
+    }
+    const [, buildingId, variant] = match;
+    try {
+      const registry = typeof shapez !== "undefined" && shapez.gMetaBuildingRegistry || null;
+      const metaBuilding = registry && typeof registry.findById === "function" ? registry.findById(buildingId) : null;
+      const availableVariants = metaBuilding && typeof metaBuilding.getAvailableVariants === "function" ? metaBuilding.getAvailableVariants(root) : null;
+      if (Array.isArray(availableVariants)) {
+        return {
+          kind: availableVariants.includes(variant) ? "likely-incompatibility" : "locked",
+          buildingId,
+          variant
+        };
+      }
+    } catch {
+    }
+    return { kind: "unrecognized", buildingId, variant };
+  }
+  function logDeserializeFailure(root, err) {
+    const { kind, buildingId, variant } = classifyDeserializeFailure(root, err);
+    if (kind === "locked") {
+      console.warn(
+        `[BlueprintBook] Blueprint deserialize failed: ${buildingId}:${variant} is not in this building's currently available variants \u2014 treating as locked/unresearched content.`,
+        err
+      );
+    } else if (kind === "likely-incompatibility") {
+      console.warn(
+        `[BlueprintBook] Blueprint deserialize failed: ${buildingId}:${variant} IS listed as available, so this isn't a content lock \u2014 likely a compatibility issue with another mod's building patch. Treating as locked anyway (fail-open) so equip stays blocked rather than crashing.`,
+        err
+      );
+    } else {
+      console.warn(
+        "[BlueprintBook] Blueprint deserialize failed for an unrecognized reason \u2014 treating as locked (fail-open).",
+        err
+      );
     }
   }
   function getBlueprintEntityCount(root, blueprintInput) {
@@ -2126,7 +2168,7 @@
         try {
           entities = bpMod.constructor.deserialize(this.root, blueprintString);
         } catch (err) {
-          console.warn("[BlueprintBook] Deserialize failed during equip, treating as locked buildings:", err);
+          logDeserializeFailure(this.root, err);
           notifyLockedBuildings();
           return;
         }
