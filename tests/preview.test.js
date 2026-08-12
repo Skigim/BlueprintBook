@@ -865,6 +865,37 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
                 { shapeKey: null, amount: 10 }
             ]);
         });
+
+        it('returns null when deserialize throws due to locked/unresearched content', () => {
+            mockBpMod.constructor.deserialize.mockImplementationOnce(() => {
+                throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+            });
+
+            const result = getBlueprintCost(mockRoot, 'RESEARCH_GATED_BP_STRING');
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('getBlueprintEntityCount', () => {
+        it('returns the entity count on successful deserialize', () => {
+            const result = getBlueprintEntityCount(mockRoot, 'VALID_BP_STRING');
+            expect(result).toBe(mockEntities.length);
+        });
+
+        it('returns 0 when entities fail to deserialize', () => {
+            mockBpMod.constructor.deserialize.mockReturnValueOnce(null);
+            const result = getBlueprintEntityCount(mockRoot, 'INVALID_BP_STRING');
+            expect(result).toBe(0);
+        });
+
+        it('returns 0 when deserialize throws due to locked/unresearched content', () => {
+            mockBpMod.constructor.deserialize.mockImplementationOnce(() => {
+                throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+            });
+
+            const result = getBlueprintEntityCount(mockRoot, 'RESEARCH_GATED_BP_STRING');
+            expect(result).toBe(0);
+        });
     });
 });
 

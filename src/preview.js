@@ -67,7 +67,7 @@ export function deserializeBlueprintEntities(root, blueprintInput) {
 }
 
 export function getBlueprintEntityCount(root, blueprintInput) {
-    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    const { entities } = deserializeBlueprintEntities(root, blueprintInput);
     return entities ? entities.length : 0;
 }
 
@@ -113,7 +113,7 @@ export function getBlueprintCost(root, blueprintInput) {
     if (root.gameMode && typeof root.gameMode.getHasFreeCopyPaste === "function" && root.gameMode.getHasFreeCopyPaste()) {
         return normalizeBlueprintCost(root, 0);
     }
-    const entities = deserializeBlueprintEntities(root, blueprintInput);
+    const { entities } = deserializeBlueprintEntities(root, blueprintInput);
     if (!entities) return null;
     try {
         const bp = new shapez.Blueprint(entities);
@@ -168,7 +168,7 @@ export class InteractiveBlueprintViewer {
         if (!this.root) return;
 
         try {
-            this.entities = deserializeBlueprintEntities(this.root, this.blueprintInput) || [];
+            this.entities = deserializeBlueprintEntities(this.root, this.blueprintInput).entities || [];
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             for (let i = 0; i < this.entities.length; ++i) {
                 const staticComp = this.entities[i]?.components?.StaticMapEntity;
@@ -433,7 +433,7 @@ export function renderBlueprintCostElement(root, costEntries, iconSize = 30) {
 export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
     if (!root || !blueprint) return;
 
-    const entities = deserializeBlueprintEntities(root, blueprint.value || blueprint);
+    const { entities, failedDueToUnlock } = deserializeBlueprintEntities(root, blueprint.value || blueprint);
     const entityCount = getBlueprintEntityCount(root, entities);
     const cost = getBlueprintCost(root, entities);
 
@@ -574,7 +574,7 @@ export function getLockedEntitiesInBlueprint(root, blueprintInput) {
     const input = (blueprintInput && typeof blueprintInput === "object" && !Array.isArray(blueprintInput) && blueprintInput.value)
         ? blueprintInput.value
         : blueprintInput;
-    const entities = deserializeBlueprintEntities(root, input);
+    const { entities } = deserializeBlueprintEntities(root, input);
     if (!entities || !Array.isArray(entities)) return [];
 
     const locked = [];
