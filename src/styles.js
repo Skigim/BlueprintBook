@@ -268,6 +268,13 @@ export const CSS = `
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
     }
 
+    .bplib-upgrade .requirement.bplib-cost-unknown .label {
+        font-family: "GameFont", sans-serif;
+        font-size: calc(13px * var(--ui-scale));
+        color: #333;
+    }
+    html[data-theme="dark"] .bplib-upgrade .requirement.bplib-cost-unknown .label { color: #fff; }
+
     .bplib-upgrade .bplib-upgrade-actions {
         grid-column: 2 / 3;
         grid-row: 2 / 3;
