@@ -726,7 +726,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
 
         const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
         let cached = this._cardCache.get(cacheKey);
-        if (!cached) {
+        if (!cached || cached.failedDueToUnlock) {
             const { entities, failedDueToUnlock } = deserializeBlueprintEntities(this.root, bp?.value);
             const cost = getBlueprintCost(this.root, entities);
             cached = { entities, cost, failedDueToUnlock };

@@ -778,8 +778,7 @@ describe('async equipBlueprint', () => {
         mockRoot = {
             app: {},
             hubGoals: {
-                isRewardUnlocked: vi.fn().mockReturnValue(true),
-                isBuildingUnlocked: vi.fn().mockReturnValue(true)
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
             },
             hud: {
                 parts: {
@@ -1042,8 +1041,7 @@ describe('_createBlueprintCard cost element rendering', () => {
         mockRoot = {
             app: {},
             hubGoals: {
-                isRewardUnlocked: vi.fn().mockReturnValue(true),
-                isBuildingUnlocked: vi.fn().mockReturnValue(true)
+                isRewardUnlocked: vi.fn().mockReturnValue(true)
             },
             shapeDefinitionMgr: {
                 getShapeFromShortKey: vi.fn().mockReturnValue({
@@ -1112,6 +1110,38 @@ describe('_createBlueprintCard cost element rendering', () => {
         const equipBtn = card.querySelector('.bplib-btn-equip');
         expect(equipBtn.disabled).toBe(true);
         expect(equipBtn.classList.contains('disabled')).toBe(true);
+    });
+
+    it('re-derives cost on next render after content unlocks mid-session, instead of staying stale', () => {
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockImplementation(() => {
+            throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+        });
+        global.shapez.Blueprint = class {
+            constructor(entities) { this.entities = entities; }
+            getCost() { return 30; }
+        };
+
+        const bp = { id: 'bp_unlocks_midsession', name: 'Unlocks Later BP', value: 'UNLOCKS_LATER_BP_STRING', tags: [] };
+
+        // First render: deserialize fails (content still locked) -> "Cost: unknown", equip disabled.
+        const firstCard = hudLibrary._createBlueprintCard(bp, () => {});
+        expect(firstCard.querySelector('.bplib-cost-unknown')).not.toBeNull();
+        expect(firstCard.querySelector('.bplib-btn-equip').disabled).toBe(true);
+
+        // Player researches the content mid-session: deserialize now succeeds.
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([{ uid: 1, components: {} }]);
+
+        // Second render of the SAME blueprint (same cache key) must not reuse the stale
+        // failedDueToUnlock cache entry.
+        const secondCard = hudLibrary._createBlueprintCard(bp, () => {});
+        expect(secondCard.querySelector('.bplib-cost-unknown')).toBeNull();
+        const requirements = secondCard.querySelectorAll('.requirement');
+        expect(requirements.length).toBe(1);
+        expect(requirements[0].querySelector('.amount').textContent).toBe('30');
+
+        const equipBtn = secondCard.querySelector('.bplib-btn-equip');
+        expect(equipBtn.disabled).toBe(false);
+        expect(equipBtn.classList.contains('disabled')).toBe(false);
     });
 });
 
