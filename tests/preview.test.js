@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+    deserializeBlueprintEntities,
     getBlueprintEntityCount,
     getBlueprintCost,
     getLockedEntitiesInBlueprint,
@@ -561,6 +562,45 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             const recenterBtn = createdDialog.element.querySelector('.bplib-preview-recenter-btn');
             expect(recenterBtn).not.toBeNull();
             expect(createdDialog.trackClicks).toHaveBeenCalledWith(recenterBtn, expect.any(Function));
+        });
+    });
+
+    describe('deserializeBlueprintEntities', () => {
+        it('returns {entities: null, failedDueToUnlock: false} for null or undefined input', () => {
+            expect(deserializeBlueprintEntities(mockRoot, null)).toEqual({ entities: null, failedDueToUnlock: false });
+            expect(deserializeBlueprintEntities(mockRoot, undefined)).toEqual({ entities: null, failedDueToUnlock: false });
+        });
+
+        it('returns the array unchanged with failedDueToUnlock false when given an already-deserialized array', () => {
+            const result = deserializeBlueprintEntities(mockRoot, mockEntities);
+            expect(result).toEqual({ entities: mockEntities, failedDueToUnlock: false });
+        });
+
+        it('returns {entities: null, failedDueToUnlock: false} when the bp-string mod is not loaded', () => {
+            global.shapez.BlueprintLibraryModLoader = { mods: [] };
+            const result = deserializeBlueprintEntities(mockRoot, 'BP_STRING');
+            expect(result).toEqual({ entities: null, failedDueToUnlock: false });
+        });
+
+        it('returns the deserialized entities with failedDueToUnlock false on success', () => {
+            const result = deserializeBlueprintEntities(mockRoot, 'VALID_BP_STRING');
+            expect(result).toEqual({ entities: mockEntities, failedDueToUnlock: false });
+        });
+
+        it('returns {entities: null, failedDueToUnlock: false} when deserialize itself returns a falsy value', () => {
+            mockBpMod.constructor.deserialize.mockReturnValueOnce(null);
+            const result = deserializeBlueprintEntities(mockRoot, 'EMPTY_RESULT_BP_STRING');
+            expect(result).toEqual({ entities: null, failedDueToUnlock: false });
+        });
+
+        it('returns {entities: null, failedDueToUnlock: true} when deserialize throws, without leaking the exception', () => {
+            mockBpMod.constructor.deserialize.mockImplementationOnce(() => {
+                throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+            });
+
+            let result;
+            expect(() => { result = deserializeBlueprintEntities(mockRoot, 'RESEARCH_GATED_BP_STRING'); }).not.toThrow();
+            expect(result).toEqual({ entities: null, failedDueToUnlock: true });
         });
     });
 

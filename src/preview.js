@@ -49,14 +49,20 @@ export function resolveBpStringMod(root) {
 }
 
 export function deserializeBlueprintEntities(root, blueprintInput) {
-    if (!blueprintInput) return null;
-    if (Array.isArray(blueprintInput)) return blueprintInput;
+    if (!blueprintInput) return { entities: null, failedDueToUnlock: false };
+    if (Array.isArray(blueprintInput)) return { entities: blueprintInput, failedDueToUnlock: false };
     const bpMod = resolveBpStringMod(root);
-    if (!bpMod) return null;
+    if (!bpMod) return { entities: null, failedDueToUnlock: false };
     try {
-        return bpMod.constructor.deserialize(root, blueprintInput) || null;
+        const entities = bpMod.constructor.deserialize(root, blueprintInput) || null;
+        return { entities, failedDueToUnlock: false };
     } catch {
-        return null;
+        // Any exception here means the string parsed to content the game can't
+        // currently construct (e.g. an unresearched shapez-industries variant) —
+        // or, less commonly, the string is corrupt. We can't robustly tell those
+        // apart without coupling to a specific mod's error wording, so both are
+        // surfaced identically as "may be locked," not silently as "no entities."
+        return { entities: null, failedDueToUnlock: true };
     }
 }
 
