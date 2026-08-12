@@ -1096,6 +1096,23 @@ describe('_createBlueprintCard cost element rendering', () => {
 
         expect(card.querySelectorAll('.requirement').length).toBe(0);
     });
+
+    it('renders "Cost: unknown" placeholder and disables equip when deserialize fails due to locked content', () => {
+        global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockImplementation(() => {
+            throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+        });
+
+        const bp = { id: 'bp_research_gated', name: 'Research Gated BP', value: 'RESEARCH_GATED_BP_STRING', tags: [] };
+        const card = hudLibrary._createBlueprintCard(bp, () => {});
+
+        expect(card.querySelector('.bplib-cost-unknown')).not.toBeNull();
+        expect(card.querySelectorAll('.requirement.bplib-cost-unknown .label')[0].textContent).toBe('Cost: unknown');
+        expect(card.querySelectorAll('.requirement:not(.bplib-cost-unknown)').length).toBe(0);
+
+        const equipBtn = card.querySelector('.bplib-btn-equip');
+        expect(equipBtn.disabled).toBe(true);
+        expect(equipBtn.classList.contains('disabled')).toBe(true);
+    });
 });
 
 describe('isBlueprintsUnlocked', () => {

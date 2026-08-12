@@ -727,21 +727,29 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
         let cached = this._cardCache.get(cacheKey);
         if (!cached) {
-            const { entities } = deserializeBlueprintEntities(this.root, bp?.value);
+            const { entities, failedDueToUnlock } = deserializeBlueprintEntities(this.root, bp?.value);
             const cost = getBlueprintCost(this.root, entities);
-            cached = { entities, cost };
+            cached = { entities, cost, failedDueToUnlock };
             this._cardCache.set(cacheKey, cached);
         }
 
-        const { entities, cost } = cached;
+        const { entities, cost, failedDueToUnlock } = cached;
         // Not cached: unlock state can change mid-session (e.g. leveling up), so this
-        // must be recomputed on every render even though entities/cost are stable.
-        // Falls back to the raw value when entities is null so a real deserialize
-        // failure (locked/unresearched content) is re-detected instead of silently
-        // reporting "not locked."
+        // must be recomputed on every render even though entities/cost/failedDueToUnlock
+        // are stable. Falls back to the raw value when entities is null so a real
+        // deserialize failure (locked/unresearched content) is re-detected instead of
+        // silently reporting "not locked."
         const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities || bp?.value);
 
-        if (cost && cost.length) {
+        if (failedDueToUnlock) {
+            const unknownDiv = document.createElement('div');
+            unknownDiv.className = 'requirement bplib-cost-unknown';
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'label';
+            labelSpan.textContent = 'Cost: unknown';
+            unknownDiv.appendChild(labelSpan);
+            reqDiv.appendChild(unknownDiv);
+        } else if (cost && cost.length) {
             const costElem = renderBlueprintCostElement(this.root, cost, 24);
             reqDiv.appendChild(costElem);
         }
@@ -764,10 +772,12 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.equipBlueprint(bp.value);
         });
 
-        if (lockedEntities.length > 0) {
+        if (failedDueToUnlock || lockedEntities.length > 0) {
             equipBtn.classList.add("disabled");
             equipBtn.disabled = true;
-            equipBtn.title = "Contains locked buildings (unlocked at higher level)";
+            equipBtn.title = failedDueToUnlock ?
+                "Cannot equip: blueprint contains locked/unresearched content" :
+                "Contains locked buildings (unlocked at higher level)";
         }
 
         const editBtn = document.createElement('button');
