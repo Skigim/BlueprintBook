@@ -772,12 +772,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             this.equipBlueprint(bp.value);
         });
 
-        if (failedDueToUnlock || lockedEntities.length > 0) {
+        if (lockedEntities.length > 0) {
             equipBtn.classList.add("disabled");
             equipBtn.disabled = true;
-            equipBtn.title = failedDueToUnlock ?
-                "Cannot equip: blueprint contains locked/unresearched content" :
-                "Contains locked buildings (unlocked at higher level)";
+            equipBtn.title = "Contains locked buildings (unlocked at higher level)";
         }
 
         const editBtn = document.createElement('button');
