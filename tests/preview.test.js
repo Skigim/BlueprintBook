@@ -317,6 +317,116 @@ describe('Blueprint Preview Renderer (src/preview.js)', () => {
             expect(locked).toHaveLength(1);
             expect(locked[0]).toBe(lockedVariantEntity);
         });
+
+        it('returns a non-empty sentinel result when deserialize fails due to locked/unresearched content', () => {
+            mockBpMod.constructor.deserialize.mockImplementationOnce(() => {
+                throw new Error('AssertionError: Unknown balancer variant: merger-inverse');
+            });
+
+            const locked = getLockedEntitiesInBlueprint(mockRoot, 'RESEARCH_GATED_BP_STRING');
+            expect(locked.length).toBeGreaterThan(0);
+        });
+
+        it('treats a variant filtered from getAvailableVariants as unlocked when its building code is registered in shapez.gBuildingVariants', () => {
+            global.shapez.gBuildingVariants = {
+                123: { variant: 'mirrored' }
+            };
+
+            const toolbarHiddenEntity = {
+                components: {
+                    StaticMapEntity: {
+                        code: 123,
+                        getVariant: () => 'mirrored',
+                        getMetaBuilding: () => ({
+                            getIsUnlocked: vi.fn().mockReturnValue(true),
+                            // Some other mod (e.g. a toolbar mod) filtered 'mirrored' out of
+                            // getAvailableVariants without actually locking it:
+                            getAvailableVariants: vi.fn().mockReturnValue(['default'])
+                        })
+                    }
+                }
+            };
+            mockBpMod.constructor.deserialize.mockReturnValueOnce([toolbarHiddenEntity]);
+
+            const locked = getLockedEntitiesInBlueprint(mockRoot, 'BP_STRING');
+            expect(locked).toEqual([]);
+
+            delete global.shapez.gBuildingVariants;
+        });
+
+        it('still treats a filtered variant as locked when its code is not in shapez.gBuildingVariants', () => {
+            global.shapez.gBuildingVariants = {};
+
+            const filteredEntity = {
+                components: {
+                    StaticMapEntity: {
+                        code: 999,
+                        getVariant: () => 'mirrored',
+                        getMetaBuilding: () => ({
+                            getIsUnlocked: vi.fn().mockReturnValue(true),
+                            getAvailableVariants: vi.fn().mockReturnValue(['default'])
+                        })
+                    }
+                }
+            };
+            mockBpMod.constructor.deserialize.mockReturnValueOnce([filteredEntity]);
+
+            const locked = getLockedEntitiesInBlueprint(mockRoot, 'BP_STRING');
+            expect(locked).toHaveLength(1);
+
+            delete global.shapez.gBuildingVariants;
+        });
+
+        it('fails open (treats as unlocked) and logs a warning when getIsUnlocked throws', () => {
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            const throwingEntity = {
+                components: {
+                    StaticMapEntity: {
+                        code: 1,
+                        getVariant: () => 'default',
+                        getMetaBuilding: () => ({
+                            getIsUnlocked: () => { throw new Error('Mod unlock check error'); },
+                            getAvailableVariants: () => ['default']
+                        })
+                    }
+                }
+            };
+            mockBpMod.constructor.deserialize.mockReturnValueOnce([throwingEntity]);
+
+            let locked;
+            expect(() => { locked = getLockedEntitiesInBlueprint(mockRoot, 'BP_STRING'); }).not.toThrow();
+            expect(locked).toEqual([]);
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[BlueprintBook] Unlock check threw exception, failing open (unlocked):',
+                expect.any(Error)
+            );
+
+            warnSpy.mockRestore();
+        });
+
+        it('fails open and logs a warning when a single entity throws during inspection', () => {
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            const brokenEntity = {
+                components: {
+                    StaticMapEntity: {
+                        get code() { throw new Error('boom'); }
+                    }
+                }
+            };
+            mockBpMod.constructor.deserialize.mockReturnValueOnce([brokenEntity]);
+
+            let locked;
+            expect(() => { locked = getLockedEntitiesInBlueprint(mockRoot, 'BP_STRING'); }).not.toThrow();
+            expect(locked).toEqual([]);
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[BlueprintBook] Entity inspection error, failing open:',
+                expect.any(Error)
+            );
+
+            warnSpy.mockRestore();
+        });
     });
 
     describe('InteractiveBlueprintViewer', () => {

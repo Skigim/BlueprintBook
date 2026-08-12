@@ -3,7 +3,7 @@ import { BlueprintStore, getActiveVersion } from "./store.js";
 import { METADATA } from "./metadata.js";
 import { checkForUpdates } from "./updater.js";
 import { runDeferredMigrationScan } from "./migrationScan.js";
-import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities } from "./preview.js";
+import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities, getLockedEntitiesInBlueprint } from "./preview.js";
 
 const NOTIFY = shapez.enumNotificationType;
 
@@ -24,28 +24,6 @@ export function registerNativeChangelogEntry() {
             entries
         });
     }
-}
-
-export function getLockedEntitiesInBlueprint(root, entities) {
-    if (!entities || !Array.isArray(entities) || !root) return [];
-    const locked = [];
-    for (let i = 0; i < entities.length; i++) {
-        const entity = entities[i];
-        const staticComp = entity.components?.StaticMapEntity;
-        const meta = staticComp?.getMetaBuilding ? staticComp.getMetaBuilding() : null;
-        if (meta) {
-            let unlocked = true;
-            if (root.hubGoals && typeof root.hubGoals.isBuildingUnlocked === "function") {
-                unlocked = root.hubGoals.isBuildingUnlocked(meta);
-            } else if (typeof meta.getIsUnlocked === "function") {
-                unlocked = meta.getIsUnlocked(root);
-            }
-            if (!unlocked) {
-                locked.push(entity);
-            }
-        }
-    }
-    return locked;
 }
 
 export function isBlueprintsUnlocked(root) {
@@ -749,7 +727,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         const cacheKey = `${bp?.id || ""}:${bp?.value || ""}`;
         let cached = this._cardCache.get(cacheKey);
         if (!cached) {
-            const entities = deserializeBlueprintEntities(this.root, bp?.value);
+            const { entities } = deserializeBlueprintEntities(this.root, bp?.value);
             const cost = getBlueprintCost(this.root, entities);
             cached = { entities, cost };
             this._cardCache.set(cacheKey, cached);
@@ -758,7 +736,10 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
         const { entities, cost } = cached;
         // Not cached: unlock state can change mid-session (e.g. leveling up), so this
         // must be recomputed on every render even though entities/cost are stable.
-        const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities);
+        // Falls back to the raw value when entities is null so a real deserialize
+        // failure (locked/unresearched content) is re-detected instead of silently
+        // reporting "not locked."
+        const lockedEntities = getLockedEntitiesInBlueprint(this.root, entities || bp?.value);
 
         if (cost && cost.length) {
             const costElem = renderBlueprintCostElement(this.root, cost, 24);

@@ -566,44 +566,81 @@ export function openBlueprintPreviewDialog(root, blueprint, onEquip) {
 
 /**
  * Inspects blueprint entities and returns an array of locked building entities.
- * @param {object} root 
- * @param {any} blueprintInput 
+ * When the underlying deserialize failed because it references locked/unresearched
+ * content (see deserializeBlueprintEntities), returns a single opaque sentinel entry
+ * so callers that gate on `.length > 0` (equip-disable, locked-warning badge) still
+ * behave correctly without needing to special-case this result.
+ * @param {object} root
+ * @param {any} blueprintInput
  * @returns {Array}
  */
 export function getLockedEntitiesInBlueprint(root, blueprintInput) {
     const input = (blueprintInput && typeof blueprintInput === "object" && !Array.isArray(blueprintInput) && blueprintInput.value)
         ? blueprintInput.value
         : blueprintInput;
-    const { entities } = deserializeBlueprintEntities(root, input);
+    const { entities, failedDueToUnlock } = deserializeBlueprintEntities(root, input);
+    if (failedDueToUnlock) return [{ __unresolvable: true }];
     if (!entities || !Array.isArray(entities)) return [];
 
     const locked = [];
     for (let i = 0; i < entities.length; ++i) {
-        const entity = entities[i];
-        const staticComp = entity?.components?.StaticMapEntity;
-        if (!staticComp) continue;
+        try {
+            const entity = entities[i];
+            const staticComp = entity?.components?.StaticMapEntity;
+            if (!staticComp) continue;
 
-        const metaBuilding = typeof staticComp.getMetaBuilding === "function"
-            ? staticComp.getMetaBuilding()
-            : null;
-        if (!metaBuilding) continue;
+            // Read eagerly (not just inside the variant-fallback branch below) so a
+            // mod-supplied entity with a throwing `code` accessor is still caught by
+            // this per-entity try/catch and fails open instead of aborting the loop.
+            const code = staticComp.code;
 
-        const isUnlocked = typeof metaBuilding.getIsUnlocked === "function"
-            ? metaBuilding.getIsUnlocked(root)
-            : true;
+            const metaBuilding = typeof staticComp.getMetaBuilding === "function"
+                ? staticComp.getMetaBuilding()
+                : null;
+            if (!metaBuilding) continue;
 
-        const variant = typeof staticComp.getVariant === "function"
-            ? staticComp.getVariant()
-            : (staticComp.variant || "default");
+            let isUnlocked = true;
+            try {
+                isUnlocked = typeof metaBuilding.getIsUnlocked === "function"
+                    ? metaBuilding.getIsUnlocked(root)
+                    : true;
+            } catch (err) {
+                console.warn("[BlueprintBook] Unlock check threw exception, failing open (unlocked):", err);
+                isUnlocked = true;
+            }
 
-        const availableVariants = typeof metaBuilding.getAvailableVariants === "function"
-            ? metaBuilding.getAvailableVariants(root)
-            : [variant];
+            const variant = typeof staticComp.getVariant === "function"
+                ? staticComp.getVariant()
+                : (staticComp.variant || "default");
 
-        const isVariantUnlocked = Array.isArray(availableVariants) && availableVariants.includes(variant);
+            const availableVariants = typeof metaBuilding.getAvailableVariants === "function"
+                ? metaBuilding.getAvailableVariants(root)
+                : [variant];
 
-        if (!isUnlocked || !isVariantUnlocked) {
-            locked.push(entity);
+            let isVariantUnlocked = Array.isArray(availableVariants) && availableVariants.includes(variant);
+
+            if (!isVariantUnlocked) {
+                // A variant can be registered (staticComp.code is valid) but filtered out of
+                // getAvailableVariants by a third mod (e.g. a toolbar mod hiding "mirrored")
+                // without actually being locked. shapez.gBuildingVariants is the live building-
+                // codes registry (verified against shapez_source/src/js/game/building_codes.js
+                // and mods/modloader.js's exposeExports()); a code is registered per-variant, so
+                // existence alone confirms this code corresponds to the entity's actual variant.
+                try {
+                    const gVariants = (typeof shapez !== "undefined" && shapez.gBuildingVariants) || null;
+                    if (code !== undefined && code !== null && gVariants && gVariants[code]) {
+                        isVariantUnlocked = true;
+                    }
+                } catch {
+                    // shapez.gBuildingVariants unavailable or lookup failed — leave locked.
+                }
+            }
+
+            if (!isUnlocked || !isVariantUnlocked) {
+                locked.push(entity);
+            }
+        } catch (err) {
+            console.warn("[BlueprintBook] Entity inspection error, failing open:", err);
         }
     }
     return locked;

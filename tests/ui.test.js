@@ -885,12 +885,14 @@ describe('async equipBlueprint', () => {
         const lockedEntity = {
             components: {
                 StaticMapEntity: {
-                    getMetaBuilding: () => ({ id: 'locked_building' })
+                    getMetaBuilding: () => ({
+                        id: 'locked_building',
+                        getIsUnlocked: vi.fn().mockReturnValue(false)
+                    })
                 }
             }
         };
         global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
-        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
 
         await hudLibrary.equipBlueprint('LOCKED_BP_STRING');
 
@@ -954,21 +956,24 @@ describe('async equipBlueprint', () => {
         // Regression: caching {entities, cost, lockedEntities} together kept a card's locked
         // state frozen from its first render, even after the player leveled up mid-session.
         const bp = { id: 'bp_progression', name: 'Progression BP', value: 'PROGRESSION_BP_VALUE', tags: [] };
+        const isUnlockedMock = vi.fn().mockReturnValue(false);
         const gatedEntity = {
             components: {
                 StaticMapEntity: {
-                    getMetaBuilding: () => ({ id: 'gated_building' })
+                    getMetaBuilding: () => ({
+                        id: 'gated_building',
+                        getIsUnlocked: isUnlockedMock
+                    })
                 }
             }
         };
         global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([gatedEntity]);
-        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
 
         let card = hudLibrary._createBlueprintCard(bp, () => {});
         expect(card.querySelector('.bplib-btn-equip').disabled).toBe(true);
 
         // Player levels up and unlocks the building; the blueprint's id/value haven't changed.
-        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(true);
+        isUnlockedMock.mockReturnValue(true);
 
         card = hudLibrary._createBlueprintCard(bp, () => {});
         expect(card.querySelector('.bplib-btn-equip').disabled).toBe(false);
@@ -978,12 +983,14 @@ describe('async equipBlueprint', () => {
         const lockedEntity = {
             components: {
                 StaticMapEntity: {
-                    getMetaBuilding: () => ({ id: 'locked_building' })
+                    getMetaBuilding: () => ({
+                        id: 'locked_building',
+                        getIsUnlocked: vi.fn().mockReturnValue(false)
+                    })
                 }
             }
         };
         global.shapez.BlueprintLibraryModLoader.mods[0].constructor.deserialize.mockReturnValue([lockedEntity]);
-        mockRoot.hubGoals.isBuildingUnlocked.mockReturnValue(false);
 
         const bp = { id: 'bp_locked', name: 'Locked BP', value: 'LOCKED_BP_STRING', tags: [] };
         const card = hudLibrary._createBlueprintCard(bp, () => {});
