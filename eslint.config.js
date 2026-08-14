@@ -3,7 +3,9 @@ import tsPlugin from "@typescript-eslint/eslint-plugin";
 
 export default [
     {
-        ignores: ["node_modules/**", "dist/**", "BlueprintLibrary.mod.js", "mod_io_page/**", "tests/**"],
+        // .claude/worktrees/ holds linked git worktrees — full copies of this repo whose
+        // files sit outside tsconfig's project, so linting them yields only parse errors.
+        ignores: ["node_modules/**", "dist/**", "BlueprintLibrary.mod.js", "mod_io_page/**", "tests/**", ".claude/**"],
     },
     {
         files: ["src/**/*.js", "lib/**/*.js"],

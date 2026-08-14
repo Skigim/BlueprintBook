@@ -1,5 +1,6 @@
 .memory/
 node_modules/
+.claude/worktrees/
 tree.json
 .agents/
 AGENTS.md

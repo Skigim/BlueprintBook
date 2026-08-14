@@ -1,9 +1,13 @@
+import { METADATA } from "./metadata.js";
+
 /**
  * @param {any} mod
  * @param {boolean|null} [forceIsDev]
  */
 export function getActiveVersion(mod, forceIsDev = null) {
-    const baseVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : "1.0.3";
+    // The real modloader always supplies mod.meta.version; METADATA.version is the
+    // fallback so this cannot silently drift to a stale release on a version bump.
+    const baseVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : METADATA.version;
     const isDev = forceIsDev !== null
         ? Boolean(forceIsDev)
         : (typeof IS_DEV !== "undefined" ? Boolean(IS_DEV) : Boolean(mod && mod.meta && mod.meta.isDev));

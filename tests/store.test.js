@@ -428,9 +428,9 @@ describe('BlueprintStore Logic', () => {
             expect(getActiveVersion(mod, false)).toBe('1.0.3');
         });
 
-        it('returns default base version 1.0.3 when mod or meta.version is missing and isDev is false', () => {
-            expect(getActiveVersion(null, false)).toBe('1.0.3');
-            expect(getActiveVersion({}, false)).toBe('1.0.3');
+        it('falls back to METADATA.version when mod or meta.version is missing and isDev is false', () => {
+            expect(getActiveVersion(null, false)).toBe(METADATA.version);
+            expect(getActiveVersion({}, false)).toBe(METADATA.version);
         });
 
         it('returns dynamic baseVersion-dev.<timestamp> string when isDev is true', () => {
