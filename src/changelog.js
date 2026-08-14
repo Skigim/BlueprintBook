@@ -9,7 +9,8 @@ export const MOD_CHANGELOG = [
             "<strong>Unresearched Blueprints Looked Empty</strong>: Blueprints containing content you have not researched yet no longer show up as empty and equippable. Cards show 'Cost: unknown', the preview shows 'Buildings: ?', and EQUIP stays disabled.",
             "<strong>Equipping an Unresearched Blueprint</strong>: Fixed a raw error on equip; you now get the normal locked-buildings warning.",
             "<strong>Cost Stuck on Unknown</strong>: Fixed cards keeping 'Cost: unknown' for the rest of the session after you researched the missing content.",
-            "<strong>Hidden Variants Marked as Locked</strong>: Fixed blueprints being marked locked when another mod merely hides a building variant from the toolbar."
+            "<strong>Hidden Variants Marked as Locked</strong>: Fixed blueprints being marked locked when another mod merely hides a building variant from the toolbar.",
+            "<strong>Blueprints Lost on Update</strong>: Fixed blueprints disappearing on update when you reused the name of one you had deleted earlier. Deletions are now tracked by blueprint content, not by name."
         ]
     },
     {

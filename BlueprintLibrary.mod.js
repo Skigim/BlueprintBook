@@ -18,7 +18,6 @@
       lastSeenVersion: "",
       skippedVersion: "",
       deletedValues: [],
-      deletedNames: [],
       migrationChecked: false
     }
   };
@@ -451,9 +450,6 @@
       if (!Array.isArray(mod.settings.deletedValues)) {
         mod.settings.deletedValues = [];
       }
-      if (!Array.isArray(mod.settings.deletedNames)) {
-        mod.settings.deletedNames = [];
-      }
       const currentVersion = getActiveVersion(mod, forceIsDev);
       if (!mod.settings.migrationVersion || mod.settings.migrationVersion !== currentVersion) {
         if (!mod.settings.migrationChecked) {
@@ -516,19 +512,14 @@
         mod.settings.nextBlueprintId = maxId + 1;
       }
     },
-    _mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues = [], deletedNames = []) {
-      if (!bp || !bp.value && !bp.name) return false;
+    _mergeBlueprintIfNew(bp, currentBlueprints, existingValues, deletedValues = []) {
+      if (!bp || !bp.value) return false;
       const dVals = Array.isArray(deletedValues) ? deletedValues : [];
-      const dNames = Array.isArray(deletedNames) ? deletedNames : [];
-      if (bp.value && dVals.includes(bp.value)) return false;
-      if (bp.name && dNames.includes(bp.name)) return false;
-      if (!existingValues.has(bp.value) && !existingNames.has(bp.name)) {
-        currentBlueprints.push(bp);
-        if (bp.value) existingValues.add(bp.value);
-        if (bp.name) existingNames.add(bp.name);
-        return true;
-      }
-      return false;
+      if (dVals.includes(bp.value)) return false;
+      if (existingValues.has(bp.value)) return false;
+      currentBlueprints.push(bp);
+      existingValues.add(bp.value);
+      return true;
     },
     /**
      * @param {any} mod
@@ -541,9 +532,7 @@
     async migrateLegacySettings(mod, readFileAsync, listKeysAsync) {
       const currentBlueprints = Array.isArray(mod.settings.blueprints) ? mod.settings.blueprints : [];
       const existingValues = new Set(currentBlueprints.map((bp) => bp && bp.value).filter(Boolean));
-      const existingNames = new Set(currentBlueprints.map((bp) => bp && bp.name).filter(Boolean));
       const deletedValues = Array.isArray(mod.settings.deletedValues) ? mod.settings.deletedValues : [];
-      const deletedNames = Array.isArray(mod.settings.deletedNames) ? mod.settings.deletedNames : [];
       let migratedAny = false;
       let reader = null;
       if (typeof readFileAsync === "function") {
@@ -556,8 +545,6 @@
         reader = (file) => windowAppStorage.readFileAsync(file);
       }
       let scanExecutedSuccessfully = false;
-      const scannedLegacyValues = /* @__PURE__ */ new Set();
-      const scannedLegacyNames = /* @__PURE__ */ new Set();
       if (reader) {
         try {
           scanExecutedSuccessfully = true;
@@ -575,16 +562,9 @@
                       }
                     });
                   }
-                  if (Array.isArray(parsed.deletedNames)) {
-                    parsed.deletedNames.forEach((n) => {
-                      if (n && typeof n === "string" && !deletedNames.includes(n)) {
-                        deletedNames.push(n);
-                      }
-                    });
-                  }
                   if (Array.isArray(parsed.blueprints) && parsed.blueprints.length > 0) {
                     for (const bp of parsed.blueprints) {
-                      if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                      if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, deletedValues)) {
                         migratedAny = true;
                       }
                     }
@@ -622,7 +602,7 @@
                 const bps = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.blueprints) ? parsed.blueprints : null;
                 if (bps && bps.length > 0) {
                   for (const bp of bps) {
-                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, existingNames, deletedValues, deletedNames)) {
+                    if (this._mergeBlueprintIfNew(bp, currentBlueprints, existingValues, deletedValues)) {
                       migratedAny = true;
                     }
                   }
@@ -639,7 +619,6 @@
         mod.settings.blueprints = currentBlueprints;
       }
       mod.settings.deletedValues = deletedValues;
-      mod.settings.deletedNames = deletedNames;
       return scanExecutedSuccessfully;
     },
     /**
@@ -828,14 +807,8 @@
         if (!Array.isArray(this.mod.settings.deletedValues)) {
           this.mod.settings.deletedValues = [];
         }
-        if (!Array.isArray(this.mod.settings.deletedNames)) {
-          this.mod.settings.deletedNames = [];
-        }
         if (entry.value && typeof entry.value === "string" && !this.mod.settings.deletedValues.includes(entry.value)) {
           this.mod.settings.deletedValues.push(entry.value);
-        }
-        if (entry.name && typeof entry.name === "string" && !this.mod.settings.deletedNames.includes(entry.name)) {
-          this.mod.settings.deletedNames.push(entry.name);
         }
       }
       this.mod.settings.blueprints.splice(idx, 1);
@@ -1652,7 +1625,8 @@
         "<strong>Unresearched Blueprints Looked Empty</strong>: Blueprints containing content you have not researched yet no longer show up as empty and equippable. Cards show 'Cost: unknown', the preview shows 'Buildings: ?', and EQUIP stays disabled.",
         "<strong>Equipping an Unresearched Blueprint</strong>: Fixed a raw error on equip; you now get the normal locked-buildings warning.",
         "<strong>Cost Stuck on Unknown</strong>: Fixed cards keeping 'Cost: unknown' for the rest of the session after you researched the missing content.",
-        "<strong>Hidden Variants Marked as Locked</strong>: Fixed blueprints being marked locked when another mod merely hides a building variant from the toolbar."
+        "<strong>Hidden Variants Marked as Locked</strong>: Fixed blueprints being marked locked when another mod merely hides a building variant from the toolbar.",
+        "<strong>Blueprints Lost on Update</strong>: Fixed blueprints disappearing on update when you reused the name of one you had deleted earlier. Deletions are now tracked by blueprint content, not by name."
       ]
     },
     {

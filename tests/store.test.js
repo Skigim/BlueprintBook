@@ -249,25 +249,22 @@ describe('BlueprintStore Logic', () => {
         });
 
         describe('Tombstone & Deleted Metadata Handling', () => {
-            it('includes default deletedValues and deletedNames arrays in METADATA.settings', () => {
+            it('includes a default deletedValues array in METADATA.settings', () => {
                 expect(METADATA.settings.deletedValues).toEqual([]);
-                expect(METADATA.settings.deletedNames).toEqual([]);
             });
 
-            it('initializes deletedValues and deletedNames to arrays on init if missing or invalid', async () => {
+            it('initializes deletedValues to an array on init if missing or invalid', async () => {
                 const modCorrupted = {
                     settings: {
-                        deletedValues: "not-an-array",
-                        deletedNames: null
+                        deletedValues: "not-an-array"
                     },
                     saveSettings: () => {}
                 };
                 await BlueprintStore.init(modCorrupted);
                 expect(modCorrupted.settings.deletedValues).toEqual([]);
-                expect(modCorrupted.settings.deletedNames).toEqual([]);
             });
 
-            it('records deletedValues and deletedNames when removing a blueprint without duplicating', () => {
+            it('records deletedValues when removing a blueprint without duplicating', () => {
                 BlueprintStore.add("BP1", "val1");
                 BlueprintStore.add("BP1", "val1"); // Same name and value
                 const bps = BlueprintStore.getAll();
@@ -276,15 +273,13 @@ describe('BlueprintStore Logic', () => {
 
                 BlueprintStore.remove(id1);
                 expect(mockMod.settings.deletedValues).toEqual(["val1"]);
-                expect(mockMod.settings.deletedNames).toEqual(["BP1"]);
 
                 // Removing second should not duplicate tombstone entries
                 BlueprintStore.remove(id2);
                 expect(mockMod.settings.deletedValues).toEqual(["val1"]);
-                expect(mockMod.settings.deletedNames).toEqual(["BP1"]);
             });
 
-            it('skips legacy candidates matching deletedValues or deletedNames during migration', async () => {
+            it('skips legacy candidates matching deletedValues during migration, ignoring names', async () => {
                 const mockReadFile = async (filename) => {
                     if (filename === 'modsettings_bp-library__1.0.1.json') {
                         return JSON.stringify({
@@ -309,9 +304,65 @@ describe('BlueprintStore Logic', () => {
 
                 await BlueprintStore.init(mod, mockReadFile);
 
+                // "Deleted By Name" carries a value of its own, so the name tombstone must
+                // not reject it — only the value tombstone is authoritative for real entries.
+                expect(mod.settings.blueprints).toHaveLength(2);
+                expect(mod.settings.blueprints.map(bp => bp.value).sort()).toEqual(["del-name-val", "valid-val"]);
+                expect(mod.settings.blueprints.some(bp => bp.value === "del-val")).toBe(false);
+            });
+
+            it('keeps a legacy blueprint whose name matches a tombstone but whose value does not', async () => {
+                // Regression: deleting a blueprint records its name permanently, so re-using
+                // that name for a genuinely new blueprint caused the new one to be silently
+                // discarded on the next version bump. Value is a blueprint's identity; the
+                // name is a reusable label.
+                const mockReadFile = async (filename) => {
+                    if (filename === 'modsettings_bp-library__1.0.1.json') {
+                        return JSON.stringify({
+                            blueprints: [
+                                { id: 1, name: "Paint Mixer", value: "new-paint-mixer-val", tags: ["Industries"] }
+                            ]
+                        });
+                    }
+                    throw "file_not_found";
+                };
+
+                const mod = {
+                    settings: {
+                        blueprints: [],
+                        deletedValues: ["old-paint-mixer-val"],
+                        deletedNames: ["Paint Mixer"]
+                    },
+                    saveSettings: () => {}
+                };
+
+                await BlueprintStore.init(mod, mockReadFile);
+
                 expect(mod.settings.blueprints).toHaveLength(1);
-                expect(mod.settings.blueprints[0].name).toBe("Valid Legacy BP");
-                expect(mod.settings.blueprints[0].value).toBe("valid-val");
+                expect(mod.settings.blueprints[0].value).toBe("new-paint-mixer-val");
+            });
+
+            it('ignores a legacy entry that carries no value', async () => {
+                // Without a value there is no blueprint content to restore and nothing to
+                // identify the entry by, so it is dropped rather than merged as an empty row.
+                const mockReadFile = async (filename) => {
+                    if (filename === 'modsettings_bp-library__1.0.1.json') {
+                        return JSON.stringify({ blueprints: [{ id: 1, name: "Nameless Content" }] });
+                    }
+                    throw "file_not_found";
+                };
+
+                const mod = {
+                    settings: {
+                        blueprints: [],
+                        deletedValues: []
+                    },
+                    saveSettings: () => {}
+                };
+
+                await BlueprintStore.init(mod, mockReadFile);
+
+                expect(mod.settings.blueprints).toHaveLength(0);
             });
 
             it('prunes obsolete tombstones when candidate legacy scan executes successfully', async () => {

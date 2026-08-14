@@ -13,6 +13,7 @@ All notable changes to the **Blueprint Book** mod will be documented in this fil
 - **Equipping an Unresearched Blueprint**: Fixed equipping one of those blueprints throwing a raw error instead of the normal "contains locked buildings" warning.
 - **Cost Stuck on Unknown**: Fixed an issue where a card kept showing `Cost: unknown` for the rest of the session after you researched the missing content, instead of picking the real cost back up.
 - **Hidden Variants Marked as Locked**: Fixed an issue where a blueprint was marked locked because another mod merely hides a building variant from the toolbar (for example `mirrored`) rather than actually locking it.
+- **Blueprints Lost on Update**: Fixed blueprints disappearing when updating the mod. Deleting a blueprint used to blacklist its *name* permanently, so if you later made a new blueprint reusing that name, the update quietly threw it away. Deletions are now tracked by blueprint content instead, so reusing a name is safe.
 
 ## [1.0.3] - 2026-07-28
 
