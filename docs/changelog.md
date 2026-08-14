@@ -2,12 +2,17 @@
 
 All notable changes to the **Blueprint Book** mod will be documented in this file.
 
-## [Unreleased]
+## [1.0.4] - 2026-08-14
 
 ### Bugs Squashed
 
 - **Ctrl+P While Holding a Blueprint**: Fixed an issue where pressing `Ctrl+P` to save did nothing if you had just copied a blueprint and were holding it (ready to place). Saving now works whether you have buildings selected or a blueprint held.
 - **Stale Locked Status on Cards**: Fixed an issue where a blueprint card could keep showing as "locked" (EQUIP disabled) after you leveled up and unlocked the building it needed, until you restarted or re-imported it.
+- **Blueprint Cost With Shapez Industries**: Fixed blueprint costs rendering as a run-together string like `30,20,0` when Shapez Industries is installed. Each required shape now gets its own row with its own icon.
+- **Unresearched Blueprints Looked Empty**: Fixed an issue where a blueprint containing content you had not researched yet showed up as an empty blueprint — no buildings, no cost, and a working EQUIP button. Cards now show `Cost: unknown`, the preview shows `Buildings: ?` and `Cost: unknown`, and EQUIP stays disabled.
+- **Equipping an Unresearched Blueprint**: Fixed equipping one of those blueprints throwing a raw error instead of the normal "contains locked buildings" warning.
+- **Cost Stuck on Unknown**: Fixed an issue where a card kept showing `Cost: unknown` for the rest of the session after you researched the missing content, instead of picking the real cost back up.
+- **Hidden Variants Marked as Locked**: Fixed an issue where a blueprint was marked locked because another mod merely hides a building variant from the toolbar (for example `mirrored`) rather than actually locking it.
 
 ## [1.0.3] - 2026-07-28
 

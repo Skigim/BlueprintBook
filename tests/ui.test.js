@@ -325,7 +325,9 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
     it('shows welcome dialog on first load of version and suppresses it when version is already seen', async () => {
         const { BlueprintStore } = await import('../src/store.js');
-        BlueprintStore.init({ settings: {}, saveSettings: () => {} });
+        // meta.version must be present: the real modloader always supplies it, and
+        // getActiveVersion() otherwise falls back to a hardcoded default version.
+        BlueprintStore.init({ meta: { version: METADATA.version }, settings: {}, saveSettings: () => {} });
 
         const mockRoot = {
             app: {},
@@ -1172,7 +1174,7 @@ describe('registerNativeChangelogEntry', () => {
 
         expect(global.shapez.CHANGELOG.length).toBe(1);
         expect(global.shapez.CHANGELOG[0].version).toBe(`Blueprint Book v${METADATA.version}`);
-        expect(global.shapez.CHANGELOG[0].date).toBe('2026-07-28');
+        expect(global.shapez.CHANGELOG[0].date).toBe('2026-08-14');
         expect(Array.isArray(global.shapez.CHANGELOG[0].entries)).toBe(true);
         expect(global.shapez.CHANGELOG[0].entries.length).toBeGreaterThan(0);
 

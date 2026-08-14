@@ -1,5 +1,18 @@
 export const MOD_CHANGELOG = [
     {
+        version: "1.0.4",
+        date: "2026-08-14",
+        entries: [
+            "<strong>Ctrl+P While Holding a Blueprint</strong>: Fixed Ctrl+P doing nothing when you had just copied a blueprint and were holding it ready to place.",
+            "<strong>Stale Locked Status on Cards</strong>: Fixed cards staying EQUIP-disabled after you leveled up and unlocked the building they needed.",
+            "<strong>Blueprint Cost With Shapez Industries</strong>: Fixed costs rendering as a run-together string like '30,20,0'. Each required shape now gets its own row and icon.",
+            "<strong>Unresearched Blueprints Looked Empty</strong>: Blueprints containing content you have not researched yet no longer show up as empty and equippable. Cards show 'Cost: unknown', the preview shows 'Buildings: ?', and EQUIP stays disabled.",
+            "<strong>Equipping an Unresearched Blueprint</strong>: Fixed a raw error on equip; you now get the normal locked-buildings warning.",
+            "<strong>Cost Stuck on Unknown</strong>: Fixed cards keeping 'Cost: unknown' for the rest of the session after you researched the missing content.",
+            "<strong>Hidden Variants Marked as Locked</strong>: Fixed blueprints being marked locked when another mod merely hides a building variant from the toolbar."
+        ]
+    },
+    {
         version: "1.0.3",
         date: "2026-07-28",
         entries: [
@@ -51,6 +64,7 @@ export function getReleaseNotesForVersion(version) {
     return entry ? entry.entries : [];
 }
 
+export const RELEASE_NOTES_1_0_4 = getReleaseNotesForVersion("1.0.4");
 export const RELEASE_NOTES_1_0_3 = getReleaseNotesForVersion("1.0.3");
 export const RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
 export const RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
