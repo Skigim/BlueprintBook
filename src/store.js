@@ -5,12 +5,10 @@ import { METADATA } from "./metadata.js";
  * @param {boolean|null} [forceIsDev]
  */
 export function getActiveVersion(mod, forceIsDev = null) {
-    // The real modloader always supplies mod.meta.version; METADATA.version is the
-    // fallback so this cannot silently drift to a stale release on a version bump.
     const baseVersion = (mod && mod.meta && mod.meta.version) ? String(mod.meta.version) : METADATA.version;
     const isDev = forceIsDev !== null
         ? Boolean(forceIsDev)
-        : (typeof IS_DEV !== "undefined" ? Boolean(IS_DEV) : Boolean(mod && mod.meta && mod.meta.isDev));
+        : Boolean((typeof IS_DEV !== "undefined" && IS_DEV) || (mod && mod.meta && mod.meta.isDev));
     if (isDev) {
         return `${baseVersion}-dev.${Date.now()}`;
     }
@@ -65,13 +63,7 @@ export const BlueprintStore = {
     },
 
     /**
-     * Defaults/normalizes everything in `mod.settings` that isn't the migration scan itself:
-     * `nextBlueprintId`, `availableTags` (pruned to tags actually in use), each blueprint entry
-     * (assigning `id`/`createdAt`/fallback `name` where missing), and `lastSeenVersion` /
-     * `skippedVersion`. Idempotent - safe to call again after entries have already been
-     * normalized. Shared by `init()`'s inline path and `runDeferredMigrationScan()`
-     * (`src/migrationScan.js`), which must re-run this after merging legacy blueprints so
-     * merged entries get real ids/timestamps and `nextBlueprintId` advances past them.
+     * Normalizes mod settings and blueprint entries, ensuring consistent structure, IDs, and tags.
      * @param {any} mod
      */
     normalizeSettings(mod) {

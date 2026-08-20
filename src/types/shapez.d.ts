@@ -263,6 +263,7 @@ interface Shapez {
     gMetaBuildingRegistry?: { findById(id: string): { getAvailableVariants?(root: unknown): unknown } | null };
 
     // lib/ui.js engine-extension surface.
+    Signal?: new () => ShapezSignal;
     ModInterface: any;
     HUDGameMenu: any;
     HUDKeybindingOverlay: any;

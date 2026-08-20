@@ -1,12 +1,13 @@
 (() => {
   // src/metadata.js
+  var MOD_IO_URL = "https://mod.io/g/shapez/m/blueprint-book#description";
   var METADATA = {
     id: "bp-library",
     name: "Blueprint Library",
     author: "Skigim",
     version: "1.0.4",
     website: "",
-    description: "A full rewrite of KiitikM's Blueprint Library mod. Features include: perfectly integrated native-style UI, custom tagging and filtering system, unified edit dialogs, and memory leak fixes.",
+    description: "In-game blueprint book to save, organize, tag, filter, and preview blueprints.",
     minimumGameVersion: ">=1.5.0",
     doesNotAffectSavegame: true,
     dependencies: ["bp-string"],
@@ -423,7 +424,7 @@
   // src/store.js
   function getActiveVersion(mod, forceIsDev = null) {
     const baseVersion = mod && mod.meta && mod.meta.version ? String(mod.meta.version) : METADATA.version;
-    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : true ? Boolean(false) : Boolean(mod && mod.meta && mod.meta.isDev);
+    const isDev = forceIsDev !== null ? Boolean(forceIsDev) : Boolean(mod && mod.meta && mod.meta.isDev);
     if (isDev) {
       return `${baseVersion}-dev.${Date.now()}`;
     }
@@ -464,13 +465,7 @@
       this.persist();
     },
     /**
-     * Defaults/normalizes everything in `mod.settings` that isn't the migration scan itself:
-     * `nextBlueprintId`, `availableTags` (pruned to tags actually in use), each blueprint entry
-     * (assigning `id`/`createdAt`/fallback `name` where missing), and `lastSeenVersion` /
-     * `skippedVersion`. Idempotent - safe to call again after entries have already been
-     * normalized. Shared by `init()`'s inline path and `runDeferredMigrationScan()`
-     * (`src/migrationScan.js`), which must re-run this after merging legacy blueprints so
-     * merged entries get real ids/timestamps and `nextBlueprintId` advances past them.
+     * Normalizes mod settings and blueprint entries, ensuring consistent structure, IDs, and tags.
      * @param {any} mod
      */
     normalizeSettings(mod) {
@@ -845,7 +840,7 @@
           try {
             clickHandler.call(this);
           } catch (err) {
-            alert(`Menu click error (${buttonClass}): ` + err.message + "\n" + err.stack);
+            console.error(`Menu click error (${buttonClass}):`, err);
           }
         });
       }
@@ -907,9 +902,8 @@
     return {
       id,
       label,
-      valueChosen: { add: () => {
+      valueChosen: typeof shapez !== "undefined" && shapez.Signal ? new shapez.Signal() : { add: () => {
       } },
-      // mock Signal
       getHtml() {
         const safeValue = (defaultValue || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         return `
@@ -1675,10 +1669,6 @@
     const entry = MOD_CHANGELOG.find((item) => item.version.replace(/^v/i, "").trim() === cleanVer);
     return entry ? entry.entries : [];
   }
-  var RELEASE_NOTES_1_0_4 = getReleaseNotesForVersion("1.0.4");
-  var RELEASE_NOTES_1_0_3 = getReleaseNotesForVersion("1.0.3");
-  var RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
-  var RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
 
   // src/ui.js
   var NOTIFY = shapez.enumNotificationType;
@@ -2022,7 +2012,7 @@
           }
         });
       }
-      const targetUrl = downloadUrl || "https://mod.io/g/shapez/m/blueprint-book#description";
+      const targetUrl = MOD_IO_URL;
       if (dialog.buttonSignals.viewOnModIo) {
         dialog.buttonSignals.viewOnModIo.add(() => {
           if (this.root?.app?.platformWrapper?.openExternalLink) {

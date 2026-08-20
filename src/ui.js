@@ -1,13 +1,13 @@
 import { createTextAreaFormElement } from "../lib/ui.js";
 import { BlueprintStore, getActiveVersion } from "./store.js";
-import { METADATA } from "./metadata.js";
+import { METADATA, MOD_IO_URL } from "./metadata.js";
 import { checkForUpdates } from "./updater.js";
 import { runDeferredMigrationScan } from "./migrationScan.js";
 import { openBlueprintPreviewDialog, getBlueprintCost, getBlueprintEntityCount, renderBlueprintCostElement, deserializeBlueprintEntities, getLockedEntitiesInBlueprint, logDeserializeFailure } from "./preview.js";
 
 const NOTIFY = shapez.enumNotificationType;
 
-import { MOD_CHANGELOG, RELEASE_NOTES_1_0_1, getReleaseNotesForVersion } from "./changelog.js";
+import { MOD_CHANGELOG, getReleaseNotesForVersion } from "./changelog.js";
 
 export function registerNativeChangelogEntry() {
     const id = `Blueprint Book v${METADATA.version}`;
@@ -408,7 +408,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
             });
         }
 
-        const targetUrl = downloadUrl || "https://mod.io/g/shapez/m/blueprint-book#description";
+        const targetUrl = MOD_IO_URL;
 
         if (dialog.buttonSignals.viewOnModIo) {
             dialog.buttonSignals.viewOnModIo.add(() => {

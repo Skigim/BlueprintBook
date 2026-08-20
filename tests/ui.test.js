@@ -80,7 +80,7 @@ vi.mock('../src/migrationScan.js', () => ({
 }));
 
 const { HUDBlueprintLibrary, isBlueprintsUnlocked, registerNativeChangelogEntry } = await import('../src/ui.js');
-const { METADATA } = await import('../src/metadata.js');
+const { METADATA, MOD_IO_URL } = await import('../src/metadata.js');
 const { runDeferredMigrationScan } = await import('../src/migrationScan.js');
 
 vi.mock('../lib/ui.js', () => ({
@@ -321,6 +321,42 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
 
         expect(global.shapez.Dialog).toHaveBeenCalled();
         expect(mockRoot.hud.parts.dialogs.internalShowDialog).toHaveBeenCalledWith(mockDialog);
+    });
+
+    it('opens the mod.io listing, not the GitHub release, when VIEW ON MOD.IO is clicked', () => {
+        // Regression: the update check reads versions from the GitHub API, so `downloadUrl`
+        // is a github.com link. The button is labelled VIEW ON MOD.IO and releases are
+        // distributed there, so it must ignore downloadUrl and open the mod.io listing.
+        const viewOnModIoCbMock = { add: vi.fn() };
+        const mockDialog = {
+            buttonSignals: {
+                viewOnModIo: viewOnModIoCbMock,
+                skipVersion: { add: vi.fn() },
+            }
+        };
+
+        global.shapez.Dialog = vi.fn().mockImplementation(function () {
+            return mockDialog;
+        });
+
+        const openExternalLink = vi.fn();
+        const mockRoot = {
+            app: { platformWrapper: { openExternalLink } },
+            hud: { parts: { dialogs: { internalShowDialog: vi.fn() } } }
+        };
+
+        const hudLibrary = new HUDBlueprintLibrary(mockRoot);
+        hudLibrary.showUpdateDialog({
+            latestVersion: '1.0.5',
+            downloadUrl: 'https://github.com/Skigim/BlueprintBook/releases/tag/v1.0.5',
+            releaseNotes: 'New feature release'
+        });
+
+        expect(viewOnModIoCbMock.add).toHaveBeenCalled();
+        viewOnModIoCbMock.add.mock.calls[0][0]();
+
+        expect(openExternalLink).toHaveBeenCalledWith(MOD_IO_URL);
+        expect(openExternalLink.mock.calls[0][0]).not.toContain('github.com');
     });
 
     it('shows welcome dialog on first load of version and suppresses it when version is already seen', async () => {

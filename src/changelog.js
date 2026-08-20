@@ -65,9 +65,4 @@ export function getReleaseNotesForVersion(version) {
     return entry ? entry.entries : [];
 }
 
-export const RELEASE_NOTES_1_0_4 = getReleaseNotesForVersion("1.0.4");
-export const RELEASE_NOTES_1_0_3 = getReleaseNotesForVersion("1.0.3");
-export const RELEASE_NOTES_1_0_2 = getReleaseNotesForVersion("1.0.2");
-export const RELEASE_NOTES_1_0_1 = getReleaseNotesForVersion("1.0.1");
-
 
