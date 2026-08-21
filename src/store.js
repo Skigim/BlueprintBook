@@ -192,6 +192,7 @@ export const BlueprintStore = {
                             }
                         }
                     } catch (e) {
+                        console.warn(`[BlueprintBook] Skipped unreadable legacy file "${file}":`, e);
                     }
                 }
             } catch (err) {
@@ -227,7 +228,9 @@ export const BlueprintStore = {
                     }
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            console.warn("[BlueprintBook] localStorage legacy migration skipped:", e);
+        }
 
         if (migratedAny) {
             mod.settings.blueprints = currentBlueprints;
