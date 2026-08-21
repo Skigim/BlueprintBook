@@ -322,6 +322,18 @@ export const BlueprintStore = {
         return Array.from(candidates);
     },
 
+    /**
+     * Whether the automatic update check may run. Opt-out for the unprompted outbound
+     * request made when the panel first opens; the manual "check for updates" action is
+     * user-initiated and is not gated by this.
+     */
+    getUpdateChecksEnabled() {
+        if (this.mod && this.mod.settings && typeof this.mod.settings.updateChecksEnabled === "boolean") {
+            return this.mod.settings.updateChecksEnabled;
+        }
+        return true;
+    },
+
     getLastSeenVersion() {
         if (this.mod && this.mod.settings && typeof this.mod.settings.lastSeenVersion === "string" && this.mod.settings.lastSeenVersion) {
             return this.mod.settings.lastSeenVersion;

@@ -243,6 +243,7 @@ export class HUDBlueprintLibrary extends shapez.BaseHUDPart {
     }
 
     async checkUpdateOnce() {
+        if (!BlueprintStore.getUpdateChecksEnabled()) return;
         if (HUDBlueprintLibrary.hasCheckedUpdate) return;
         HUDBlueprintLibrary.hasCheckedUpdate = true;
 

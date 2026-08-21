@@ -359,6 +359,34 @@ describe('HUDBlueprintLibrary Update Dialog', () => {
         expect(openExternalLink.mock.calls[0][0]).not.toContain('github.com');
     });
 
+    it('skips the automatic update check when updateChecksEnabled is false', async () => {
+        // The check makes an unprompted outbound request when the panel first opens, so it
+        // must be opt-out. The manual check is user-initiated and stays available.
+        const { checkForUpdates } = await import('../src/updater.js');
+        const { BlueprintStore } = await import('../src/store.js');
+        checkForUpdates.mockClear();
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+        BlueprintStore.init({ meta: { version: METADATA.version }, settings: { updateChecksEnabled: false }, saveSettings: () => {} });
+
+        const hudLibrary = new HUDBlueprintLibrary({ app: {}, hud: { parts: { dialogs: {} } } });
+        await hudLibrary.checkUpdateOnce();
+
+        expect(checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    it('runs the automatic update check when the setting is absent (defaults on)', async () => {
+        const { checkForUpdates } = await import('../src/updater.js');
+        const { BlueprintStore } = await import('../src/store.js');
+        checkForUpdates.mockClear();
+        HUDBlueprintLibrary.hasCheckedUpdate = false;
+        BlueprintStore.init({ meta: { version: METADATA.version }, settings: {}, saveSettings: () => {} });
+
+        const hudLibrary = new HUDBlueprintLibrary({ app: {}, hud: { parts: { dialogs: {} } } });
+        await hudLibrary.checkUpdateOnce();
+
+        expect(checkForUpdates).toHaveBeenCalled();
+    });
+
     it('shows welcome dialog on first load of version and suppresses it when version is already seen', async () => {
         const { BlueprintStore } = await import('../src/store.js');
         // meta.version must be present: the real modloader always supplies it, and

@@ -19,7 +19,8 @@
       lastSeenVersion: "",
       skippedVersion: "",
       deletedValues: [],
-      migrationChecked: false
+      migrationChecked: false,
+      updateChecksEnabled: true
     }
   };
 
@@ -687,6 +688,17 @@
         }
       }
       return Array.from(candidates);
+    },
+    /**
+     * Whether the automatic update check may run. Opt-out for the unprompted outbound
+     * request made when the panel first opens; the manual "check for updates" action is
+     * user-initiated and is not gated by this.
+     */
+    getUpdateChecksEnabled() {
+      if (this.mod && this.mod.settings && typeof this.mod.settings.updateChecksEnabled === "boolean") {
+        return this.mod.settings.updateChecksEnabled;
+      }
+      return true;
     },
     getLastSeenVersion() {
       if (this.mod && this.mod.settings && typeof this.mod.settings.lastSeenVersion === "string" && this.mod.settings.lastSeenVersion) {
@@ -1881,6 +1893,7 @@
       });
     }
     async checkUpdateOnce() {
+      if (!BlueprintStore.getUpdateChecksEnabled()) return;
       if (_HUDBlueprintLibrary.hasCheckedUpdate) return;
       _HUDBlueprintLibrary.hasCheckedUpdate = true;
       const currentVersion = getActiveVersion(this.root?.app?.modLoader?.mods?.find((m) => m?.metadata?.id === "bp-library") || BlueprintStore.mod);
